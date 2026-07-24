@@ -115,51 +115,51 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| STEP-01 | — | Pending |
-| STEP-02 | — | Pending |
-| STEP-03 | — | Pending |
-| STEP-04 | — | Pending |
-| STEP-05 | — | Pending |
-| FOOD-01 | — | Pending |
-| FOOD-02 | — | Pending |
-| FOOD-03 | — | Pending |
-| FOOD-04 | — | Pending |
-| FOOD-05 | — | Pending |
-| LEAD-01 | — | Pending |
-| LEAD-02 | — | Pending |
-| LEAD-03 | — | Pending |
-| SOCL-01 | — | Pending |
-| SOCL-02 | — | Pending |
-| SOCL-03 | — | Pending |
-| SOCL-04 | — | Pending |
-| SOCL-05 | — | Pending |
-| SOCL-06 | — | Pending |
-| DASH-01 | — | Pending |
-| DASH-02 | — | Pending |
-| DASH-03 | — | Pending |
-| DASH-04 | — | Pending |
-| DASH-05 | — | Pending |
-| DASH-06 | — | Pending |
-| ENGA-01 | — | Pending |
-| ENGA-02 | — | Pending |
-| ENGA-03 | — | Pending |
-| ENGA-04 | — | Pending |
-| ENGA-05 | — | Pending |
-| ENGA-06 | — | Pending |
-| INFR-01 | — | Pending |
-| INFR-02 | — | Pending |
-| INFR-03 | — | Pending |
-| INFR-04 | — | Pending |
-| INFR-05 | — | Pending |
+| AUTH-01 | Phase 1 | Pending |
+| AUTH-02 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Pending |
+| STEP-01 | Phase 2 | Pending |
+| STEP-02 | Phase 2 | Pending |
+| STEP-03 | Phase 2 | Pending |
+| STEP-04 | Phase 2 | Pending |
+| STEP-05 | Phase 2 | Pending |
+| FOOD-01 | Phase 3 | Pending |
+| FOOD-02 | Phase 3 | Pending |
+| FOOD-03 | Phase 3 | Pending |
+| FOOD-04 | Phase 3 | Pending |
+| FOOD-05 | Phase 3 | Pending |
+| LEAD-01 | Phase 4 | Pending |
+| LEAD-02 | Phase 4 | Pending |
+| LEAD-03 | Phase 4 | Pending |
+| SOCL-01 | Phase 4 | Pending |
+| SOCL-02 | Phase 4 | Pending |
+| SOCL-03 | Phase 4 | Pending |
+| SOCL-04 | Phase 4 | Pending |
+| SOCL-05 | Phase 4 | Pending |
+| SOCL-06 | Phase 4 | Pending |
+| DASH-01 | Phase 5 | Pending |
+| DASH-02 | Phase 5 | Pending |
+| DASH-03 | Phase 5 | Pending |
+| DASH-04 | Phase 5 | Pending |
+| DASH-05 | Phase 5 | Pending |
+| DASH-06 | Phase 5 | Pending |
+| ENGA-01 | Phase 5 | Pending |
+| ENGA-02 | Phase 5 | Pending |
+| ENGA-03 | Phase 5 | Pending |
+| ENGA-04 | Phase 5 | Pending |
+| ENGA-05 | Phase 5 | Pending |
+| ENGA-06 | Phase 5 | Pending |
+| INFR-01 | Phase 1 | Pending |
+| INFR-02 | Phase 1 | Pending |
+| INFR-03 | Phase 2 | Pending |
+| INFR-04 | Phase 4 | Pending |
+| INFR-05 | Phase 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 38 total
-- Mapped to phases: 0
-- Unmapped: 37 ⚠️
+- v1 requirements: 39 total
+- Mapped to phases: 39
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-24*
-*Last updated: 2026-07-24 after initial definition*
+*Last updated: 2026-07-24 after roadmap creation*
