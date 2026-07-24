@@ -8,7 +8,16 @@
     "scheme": "treadpeak",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.codingmileagee.TreadPeak",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "TreadPeak uses your location to show your current position on the map.",
+        "NSHealthShareUsageDescription": "TreadPeak reads your step count and walking data to track your daily activity.",
+        "NSHealthUpdateUsageDescription": "TreadPeak saves your tracked walks to Apple Health.",
+        "NSCameraUsageDescription": "TreadPeak uses the camera to scan barcodes for food logging.",
+        "NSContactsUsageDescription": "TreadPeak uses your contacts to help you find friends on the app."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,11 +41,28 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TreadPeak uses your location to show your current position on the map."
+        }
+      ],
+      "react-native-maps",
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-audio",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "72620361-2592-4ef2-8a13-63e8e5b54e33"
+      }
     }
   }
 }
