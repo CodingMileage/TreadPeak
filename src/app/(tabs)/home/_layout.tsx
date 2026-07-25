@@ -22,7 +22,6 @@ export default function HomeLayout() {
         name="index"
         options={{
           title: "Home",
-          headerLargeTitle: true,
           headerRight: () => (
             <Link href="/history" asChild>
               <Pressable className="active:opacity-60">
