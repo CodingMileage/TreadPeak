@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, View, Text } from "react-native";
-import type { AppStateStatus } from "react-native";
 import { Pedometer } from "expo-sensors";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { AppStateStatus } from "react-native";
+import { AppState, Text, View } from "react-native";
 
-import { LocationMap } from "@/components/location-map";
 import type { WalkStatsSnapshot } from "@/components/location-map";
+import { LocationMap } from "@/components/location-map";
 import { useHealthKit } from "@/hooks/use-healthkit";
 
 // ---------------------------------------------------------------------------
@@ -91,39 +91,39 @@ function DailyStatsCard({
         {formatDate(new Date())}
       </Text>
       <View className="flex-row items-center justify-center gap-6">
-      {/* Steps */}
-      <View className="items-center">
-        <Text className="text-2xl font-bold text-black dark:text-white">
-          {steps != null ? formatSteps(steps) : "--"}
-        </Text>
-        <Text className="text-xs font-medium tracking-wide text-neutral-500 dark:text-neutral-400">
-          STEPS
-        </Text>
-      </View>
+        {/* Steps */}
+        <View className="items-center">
+          <Text className="text-2xl font-bold text-black dark:text-white">
+            {steps != null ? formatSteps(steps) : "--"}
+          </Text>
+          <Text className="text-xs font-medium tracking-wide text-neutral-500 dark:text-neutral-400">
+            STEPS
+          </Text>
+        </View>
 
-      <View className="h-8 w-px bg-neutral-200 dark:bg-neutral-700" />
+        <View className="h-8 w-px bg-neutral-200 dark:bg-neutral-700" />
 
-      {/* Distance */}
-      <View className="items-center">
-        <Text className="text-2xl font-bold text-black dark:text-white">
-          {distance != null ? formatDistance(distance) : "--"}
-        </Text>
-        <Text className="text-xs font-medium tracking-wide text-neutral-500 dark:text-neutral-400">
-          DISTANCE
-        </Text>
-      </View>
+        {/* Distance */}
+        <View className="items-center">
+          <Text className="text-2xl font-bold text-black dark:text-white">
+            {distance != null ? formatDistance(distance) : "--"}
+          </Text>
+          <Text className="text-xs font-medium tracking-wide text-neutral-500 dark:text-neutral-400">
+            DISTANCE
+          </Text>
+        </View>
 
-      <View className="h-8 w-px bg-neutral-200 dark:bg-neutral-700" />
+        <View className="h-8 w-px bg-neutral-200 dark:bg-neutral-700" />
 
-      {/* Calories */}
-      <View className="items-center">
-        <Text className="text-2xl font-bold text-black dark:text-white">
-          {calories != null ? calories.toLocaleString() : "--"}
-        </Text>
-        <Text className="text-xs font-medium tracking-wide text-neutral-500 dark:text-neutral-400">
-          CALORIES
-        </Text>
-      </View>
+        {/* Calories */}
+        <View className="items-center">
+          <Text className="text-2xl font-bold text-black dark:text-white">
+            {calories != null ? calories.toLocaleString() : "--"}
+          </Text>
+          <Text className="text-xs font-medium tracking-wide text-neutral-500 dark:text-neutral-400">
+            CALORIES
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -146,8 +146,14 @@ function DailyStatsCard({
  * While a walk is in progress the card switches to live walk data.
  */
 export default function HomeScreen() {
-  const { authorized, lastError, todaySteps, todayDistance, todayEnergy, refresh } =
-    useHealthKit();
+  const {
+    authorized,
+    lastError,
+    todaySteps,
+    todayDistance,
+    todayEnergy,
+    refresh,
+  } = useHealthKit();
 
   // Pedometer fallback — used when HealthKit / Health Connect data is
   // unavailable (e.g. Expo Go, simulator, or authorization not yet granted).
@@ -260,7 +266,7 @@ export default function HomeScreen() {
       />
 
       {/* HealthKit status indicator */}
-      {lastError ? (
+      {/* {lastError ? (
         <View className="mx-4 mb-1 rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-900/30">
           <Text className="text-xs text-amber-800 dark:text-amber-200">
             {lastError}
@@ -273,7 +279,7 @@ export default function HomeScreen() {
             HealthKit connected
           </Text>
         </View>
-      ) : null}
+      ) : null} */}
 
       <View style={{ flex: 1 }}>
         <LocationMap onWalkStateChange={handleWalkStateChange} />
