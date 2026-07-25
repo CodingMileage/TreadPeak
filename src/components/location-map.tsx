@@ -38,8 +38,18 @@ const TRACE_COLOR = "#208AEF";
 // Props
 // ---------------------------------------------------------------------------
 
+/** Live walk stats pushed upward so the parent can display them. */
+export interface WalkStatsSnapshot {
+  isTracking: boolean;
+  steps: number;
+  distanceMetres: number;
+  elapsedSeconds: number;
+}
+
 export interface LocationMapProps {
   initialRegion?: Region;
+  /** Called whenever the live walk stats change (tracking start / update / stop). */
+  onWalkStateChange?: (snapshot: WalkStatsSnapshot | null) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,25 +77,6 @@ function totalDistance(coords: Coordinate[]): number {
     d += haversineDistance(coords[i - 1], coords[i]);
   }
   return d;
-}
-
-function formatDistance(metres: number): string {
-  if (metres < 1) return "0 m";
-  if (metres < 1000) return `${Math.round(metres)} m`;
-  return `${(metres / 1000).toFixed(1)} km`;
-}
-
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  const mmss = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  return h > 0 ? `${h}:${mmss}` : mmss;
-}
-
-function formatSteps(steps: number): string {
-  if (steps < 1000) return String(steps);
-  return `${(steps / 1000).toFixed(1)}k`;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,99 +151,6 @@ function ErrorBanner({
   );
 }
 
-/** Daily summary drawn from HealthKit / Health Connect. */
-function DailyStats({
-  steps,
-  distance,
-  energy,
-  topOffset,
-}: {
-  steps: number | null;
-  distance: number | null;
-  energy: number | null;
-  topOffset: number;
-}) {
-  return (
-    <View
-      className="absolute left-4 right-4 z-10 flex-row justify-center gap-5 rounded-xl bg-white/90 px-4 py-3 shadow-lg dark:bg-black/80"
-      style={{ top: topOffset }}
-    >
-      <View className="items-center">
-        <Text className="text-lg font-bold text-black dark:text-white">
-          {steps != null ? formatSteps(steps) : "--"}
-        </Text>
-        <Text className="text-xs text-gray-500 dark:text-gray-400">
-          Steps Today
-        </Text>
-      </View>
-      <View className="w-px bg-gray-300 dark:bg-neutral-600" />
-      <View className="items-center">
-        <Text className="text-lg font-bold text-black dark:text-white">
-          {distance != null ? formatDistance(distance) : "--"}
-        </Text>
-        <Text className="text-xs text-gray-500 dark:text-gray-400">
-          Distance
-        </Text>
-      </View>
-      <View className="w-px bg-gray-300 dark:bg-neutral-600" />
-      <View className="items-center">
-        <Text className="text-lg font-bold text-black dark:text-white">
-          {energy != null ? `${energy} kcal` : "--"}
-        </Text>
-        <Text className="text-xs text-gray-500 dark:text-gray-400">
-          Calories
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function WalkStats({
-  distanceMetres,
-  elapsedSeconds,
-  steps,
-  topOffset,
-}: {
-  distanceMetres: number;
-  elapsedSeconds: number;
-  steps: number;
-  topOffset: number;
-}) {
-  return (
-    <View
-      className="absolute left-4 right-4 z-10 flex-row justify-center gap-5 rounded-xl bg-white/90 px-4 py-3 shadow-lg dark:bg-black/80"
-      style={{ top: topOffset }}
-    >
-      <View className="items-center">
-        <Text className="text-lg font-bold text-black dark:text-white">
-          {formatDistance(distanceMetres)}
-        </Text>
-        <Text className="text-xs text-gray-500 dark:text-gray-400">
-          Distance
-        </Text>
-      </View>
-      <View className="w-px bg-gray-300 dark:bg-neutral-600" />
-      <View className="items-center">
-        <Text className="text-lg font-bold text-black dark:text-white">
-          {formatDuration(elapsedSeconds)}
-        </Text>
-        <Text className="text-xs text-gray-500 dark:text-gray-400">
-          Duration
-        </Text>
-      </View>
-      <View className="w-px bg-gray-300 dark:bg-neutral-600" />
-      <View className="items-center">
-        <Text className="text-lg font-bold text-black dark:text-white">
-          {formatSteps(steps)}
-        </Text>
-        <Text className="text-xs text-gray-500 dark:text-gray-400">
-          Steps
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 function TrackButton({
   isTracking,
   label,
@@ -304,6 +202,7 @@ function ReCenterButton({
 
 export function LocationMap({
   initialRegion = DEFAULT_REGION,
+  onWalkStateChange,
 }: LocationMapProps) {
   const {
     location,
@@ -328,8 +227,7 @@ export function LocationMap({
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
   const addWalk = useWalkStore((s) => s.addWalk);
-  const { todaySteps, todayDistance, todayEnergy, syncWorkouts } =
-    useHealthKit();
+  const { syncWorkouts } = useHealthKit();
 
   // Sync HealthKit workouts into the walk history on mount.
   useEffect(() => {
@@ -362,6 +260,18 @@ export function LocationMap({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isTracking]);
+
+  // ---- Push live walk stats upward ------------------------------------------
+
+  useEffect(() => {
+    if (onWalkStateChange) {
+      onWalkStateChange(
+        isTracking
+          ? { isTracking: true, steps, distanceMetres, elapsedSeconds }
+          : null,
+      );
+    }
+  }, [isTracking, steps, distanceMetres, elapsedSeconds, onWalkStateChange]);
 
   // ---- Auto-save on walk end -----------------------------------------------
   useEffect(() => {
@@ -483,26 +393,6 @@ export function LocationMap({
           />
         )}
       </MapView>
-
-      {/* Daily HealthKit summary (idle state) */}
-      {!isTracking && !isLoading && (
-        <DailyStats
-          steps={todaySteps}
-          distance={todayDistance}
-          energy={todayEnergy}
-          topOffset={statsTop}
-        />
-      )}
-
-      {/* Live walk stats (tracking state) */}
-      {isTracking && (
-        <WalkStats
-          distanceMetres={distanceMetres}
-          elapsedSeconds={elapsedSeconds}
-          steps={steps}
-          topOffset={statsTop}
-        />
-      )}
 
       {isLoading && <LoadingOverlay />}
 
