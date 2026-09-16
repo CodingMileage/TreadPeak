@@ -35,6 +35,11 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf="person.circle" md="person" />
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="test">
+        <NativeTabs.Trigger.Icon sf="flame" md="person" />
+        <NativeTabs.Trigger.Label>Test</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

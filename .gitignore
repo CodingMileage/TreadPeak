@@ -41,3 +41,11 @@ example
 # generated native folders
 /ios
 /android
+
+/builds
+# AI agent config (local only)
+AGENTS.md
+CLAUDE.md
+.agents/
+.claude/
+.planning/
