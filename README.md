@@ -2,6 +2,10 @@
 
 A walking-focused fitness app that tracks your daily steps and walks automatically. See how much you move every day, record GPS-tracked walks with live maps, and keep a persistent history of every walk.
 
+![Example](assets/example.png)
+![Example-2](assets/example2.png)
+![Profile](assets/profile.png)
+
 ## Features
 
 - **Daily activity dashboard** — steps, distance, and calories for the day, pulled from Apple HealthKit (iOS) / Health Connect (Android) with a hardware pedometer fallback
