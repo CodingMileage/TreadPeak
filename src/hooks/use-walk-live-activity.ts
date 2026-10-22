@@ -15,6 +15,13 @@ const IS_IOS = Platform.OS === "ios";
 /** Fixed deep link (opens the Home tab); never built from user input. */
 const DEEP_LINK_URL = "treadpeak://home";
 
+/**
+ * How often live stats are pushed to the activity. Matches the Home pedometer
+ * polling cadence and stays well under ActivityKit's update throttling. The
+ * elapsed timer ticks natively, so it needs no updates.
+ */
+const UPDATE_INTERVAL_MS = 5_000;
+
 /** How long the "Walk complete" summary stays on the Lock Screen. */
 const END_DISMISS_AFTER_MS = 5 * 60 * 1000;
 
@@ -106,6 +113,28 @@ function warn(message: string, error: unknown): void {
   if (__DEV__) console.warn("[walk-live-activity] " + message, error);
 }
 
+/**
+ * Recover Live Activities left over from a previous JS session.
+ *
+ * Returns the first active instance (to be re-attached) and ends any extras
+ * immediately so duplicates never pile up. Returns null when none exist or
+ * when ActivityKit is unavailable.
+ */
+function adoptExistingActivity(): LiveActivity<WalkActivityProps> | null {
+  try {
+    const [first, ...extras] = WalkActivity.getInstances();
+    for (const extra of extras) {
+      extra
+        .end("immediate")
+        .catch((error: unknown) => warn("end duplicate failed", error));
+    }
+    return first ?? null;
+  } catch (error) {
+    warn("getInstances failed", error);
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -114,9 +143,21 @@ function warn(message: string, error: unknown): void {
  * Mirrors the active walk into an iOS Live Activity (Lock Screen banner and
  * Dynamic Island).
  *
- * - Starts one Live Activity when `isTracking` becomes true.
+ * Lifecycle:
+ * - Starts one Live Activity when `isTracking` becomes true. An already
+ *   running activity (from `getInstances()`) is re-attached instead, so a
+ *   second one is never created.
+ * - Every 5 s while tracking, pushes fresh steps, distance and pace. Updates
+ *   are skipped when nothing changed since the last one sent.
  * - Ends it with a frozen "Walk complete" summary, removed by the system five
  *   minutes later, when `isTracking` becomes false.
+ * - On mount after a relaunch, activities left over from the dead JS session
+ *   are ended immediately (walk state is in-memory only, so no walk can still
+ *   be tracked at that point).
+ *
+ * Limitation: steps, distance and pace refresh only while the app's JS is
+ * running (foreground, or briefly after backgrounding). The elapsed time keeps
+ * ticking natively. Background location and APNs push are out of scope.
  *
  * iOS only: every call is behind `Platform.OS === "ios"`, so Android and web
  * are unaffected.
@@ -129,6 +170,7 @@ export function useWalkLiveActivity({
   const activityRef = useRef<LiveActivity<WalkActivityProps> | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const latestRef = useRef({ steps, distanceMetres });
+  const lastSentKeyRef = useRef<string | null>(null);
 
   // Keep the latest stats readable from effects without re-running them.
   useEffect(() => {
@@ -146,6 +188,19 @@ export function useWalkLiveActivity({
       // Zero-state: the path was just cleared and LocationMap resets the
       // pedometer offset one render later, so `steps` is stale right now.
       const props = buildWalkActivityProps(startedAtRef.current, 0, 0, false);
+      lastSentKeyRef.current = null;
+
+      // Re-attach to a running activity (Fast Refresh, relaunch) rather than
+      // starting a duplicate.
+      const existing = activityRef.current ?? adoptExistingActivity();
+      if (existing) {
+        activityRef.current = existing;
+        existing
+          .update(props)
+          .catch((error: unknown) => warn("update failed", error));
+        return;
+      }
+
       try {
         activityRef.current = WalkActivity.start(props, DEEP_LINK_URL);
       } catch (error) {
@@ -165,7 +220,49 @@ export function useWalkLiveActivity({
         )
         .catch((error: unknown) => warn("end failed", error));
     }
+    if (!activity) {
+      // Mount path after a relaunch: these activities belong to a walk
+      // session that died with the previous JS context. Leaving them would
+      // show a ticking timer for a walk that is no longer tracked.
+      try {
+        for (const stale of WalkActivity.getInstances()) {
+          stale
+            .end("immediate")
+            .catch((error: unknown) => warn("end stale failed", error));
+        }
+      } catch (error) {
+        warn("getInstances failed", error);
+      }
+    }
     activityRef.current = null;
     startedAtRef.current = null;
+    lastSentKeyRef.current = null;
+  }, [isTracking]);
+
+  // ---- Live stat updates ---------------------------------------------------
+  useEffect(() => {
+    if (!IS_IOS || !isTracking) return;
+
+    const id = setInterval(() => {
+      const activity = activityRef.current;
+      const startedAt = startedAtRef.current;
+      if (!activity || startedAt === null) return;
+
+      const { steps: s, distanceMetres: m } = latestRef.current;
+      const props = buildWalkActivityProps(startedAt, s, m, false);
+      // Key on the displayed stats only: `elapsedLabel` changes every second
+      // and the native timer already covers it, so it would defeat dedupe.
+      const key = JSON.stringify([
+        props.stepsLabel,
+        props.distanceLabel,
+        props.paceLabel,
+      ]);
+      if (key === lastSentKeyRef.current) return;
+
+      lastSentKeyRef.current = key;
+      activity.update(props).catch((error: unknown) => warn("update failed", error));
+    }, UPDATE_INTERVAL_MS);
+
+    return () => clearInterval(id);
   }, [isTracking]);
 }
