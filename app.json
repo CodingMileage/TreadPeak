@@ -19,7 +19,8 @@
         "NSHealthShareUsageDescription": "TreadPeak reads your step count and walking data to track your daily activity.",
         "NSHealthUpdateUsageDescription": "TreadPeak saves your tracked walks to Apple Health.",
         "NSCameraUsageDescription": "TreadPeak uses the camera to scan barcodes for food logging.",
-        "NSContactsUsageDescription": "TreadPeak uses your contacts to help you find friends on the app."
+        "NSContactsUsageDescription": "TreadPeak uses your contacts to help you find friends on the app.",
+        "NSSupportsLiveActivitiesFrequentUpdates": true
       }
     },
     "android": {
@@ -55,7 +56,13 @@
       "expo-secure-store",
       "expo-sqlite",
       "expo-audio",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-widgets",
+        {
+          "frequentUpdates": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

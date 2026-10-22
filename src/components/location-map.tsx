@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHealthKit } from "@/hooks/use-healthkit";
 import { useLocation } from "@/hooks/use-location";
 import { usePedometer } from "@/hooks/use-pedometer";
+import { useWalkLiveActivity } from "@/hooks/use-walk-live-activity";
 import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
 import type { Coordinate } from "@/hooks/use-location";
 
@@ -246,6 +247,9 @@ export function LocationMap({
 
   // Hardware pedometer (with distance-based fallback).
   const { steps, reset: resetPedometer } = usePedometer(distanceMetres);
+
+  // Mirror the active walk into the iOS Live Activity.
+  useWalkLiveActivity({ isTracking, steps, distanceMetres });
 
   // ---- Timer ---------------------------------------------------------------
   useEffect(() => {
