@@ -4,7 +4,7 @@ import MapView, { Polyline, type Region } from "react-native-maps";
 import { useLocalSearchParams } from "expo-router";
 
 import { useWalkStore } from "@/lib/walk-store";
-import type { Coordinate } from "@/hooks/use-location";
+import type { Coordinate } from "@/lib/walk-geo";
 
 // ---------------------------------------------------------------------------
 // Constants

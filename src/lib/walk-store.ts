@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import type { Coordinate } from "@/hooks/use-location";
+import type { Coordinate } from "@/lib/walk-geo";
 
 // ---------------------------------------------------------------------------
 // Types

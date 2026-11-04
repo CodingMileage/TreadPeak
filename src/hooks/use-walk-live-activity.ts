@@ -41,6 +41,11 @@ export interface WalkLiveActivityInput {
   isTracking: boolean;
   steps: number;
   distanceMetres: number;
+  /**
+   * When the walk really began (epoch ms). Lets the Lock Screen timer stay
+   * correct if the walk is resumed after a relaunch; defaults to "now".
+   */
+  startedAtMs?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,16 +171,17 @@ export function useWalkLiveActivity({
   isTracking,
   steps,
   distanceMetres,
+  startedAtMs,
 }: WalkLiveActivityInput): void {
   const activityRef = useRef<LiveActivity<WalkActivityProps> | null>(null);
   const startedAtRef = useRef<number | null>(null);
-  const latestRef = useRef({ steps, distanceMetres });
+  const latestRef = useRef({ steps, distanceMetres, startedAtMs });
   const lastSentKeyRef = useRef<string | null>(null);
 
   // Keep the latest stats readable from effects without re-running them.
   useEffect(() => {
-    latestRef.current = { steps, distanceMetres };
-  }, [steps, distanceMetres]);
+    latestRef.current = { steps, distanceMetres, startedAtMs };
+  }, [steps, distanceMetres, startedAtMs]);
 
   // ---- Lifecycle: start / end ----------------------------------------------
   useEffect(() => {
@@ -183,7 +189,9 @@ export function useWalkLiveActivity({
 
     if (isTracking) {
       // Only when null so a Fast Refresh re-run mid-walk keeps the timer.
-      if (startedAtRef.current === null) startedAtRef.current = Date.now();
+      if (startedAtRef.current === null) {
+        startedAtRef.current = latestRef.current.startedAtMs ?? Date.now();
+      }
 
       // Zero-state: the path was just cleared and LocationMap resets the
       // pedometer offset one render later, so `steps` is stale right now.

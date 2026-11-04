@@ -1,4 +1,7 @@
 import "../../global.css";
+// Side-effect import: registers the background walk-location task in the
+// global scope so it exists even when iOS relaunches the app headlessly.
+import "@/lib/walk-location-task";
 
 import NetInfo from "@react-native-community/netinfo";
 import {

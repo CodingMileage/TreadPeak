@@ -15,7 +15,6 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "TreadPeak uses your location to show your current position on the map.",
         "NSHealthShareUsageDescription": "TreadPeak reads your step count and walking data to track your daily activity.",
         "NSHealthUpdateUsageDescription": "TreadPeak saves your tracked walks to Apple Health.",
         "NSCameraUsageDescription": "TreadPeak uses the camera to scan barcodes for food logging.",
@@ -49,13 +48,16 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "TreadPeak uses your location to show your current position on the map."
+          "locationWhenInUsePermission": "TreadPeak uses your location to show your position on the map and to record your walk route, even while your screen is locked during a walk.",
+          "locationAlwaysAndWhenInUsePermission": "TreadPeak uses your location to show your position on the map and to record your walk route, even while your screen is locked during a walk.",
+          "locationAlwaysPermission": "TreadPeak uses your location to show your position on the map and to record your walk route, even while your screen is locked during a walk.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "react-native-maps",
       "expo-secure-store",
       "expo-sqlite",
-      "expo-audio",
       "expo-sharing",
       [
         "expo-widgets",
