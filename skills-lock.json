@@ -1,11 +1,29 @@
 {
   "version": 1,
   "skills": {
+    "axiom-integration": {
+      "source": "charleswiltgen/axiom",
+      "sourceType": "github",
+      "skillPath": ".claude-plugin/plugins/axiom/skills/axiom-integration/SKILL.md",
+      "computedHash": "31f55fdeed73fcf9e2d0f7475fcd3722e8ae5fd83335292c099125bfc260b8fa"
+    },
+    "eas-update": {
+      "source": "expo/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/expo/skills/eas-update/SKILL.md",
+      "computedHash": "ff0d1c630212ceaea1cd68b87f85417edbce941f11794e61ce78aea9e2ea1360"
+    },
     "expo-data-fetching": {
       "source": "expo/skills",
       "sourceType": "github",
       "skillPath": "plugins/expo/skills/expo-data-fetching/SKILL.md",
       "computedHash": "4059c46e4c2146a21f3cfb1077cfebc15dbcaf3761ebf47daf31bde6b6d4bffd"
+    },
+    "expo-dev-client": {
+      "source": "expo/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/expo/skills/expo-dev-client/SKILL.md",
+      "computedHash": "892f5e55a49d2ea441c3d1d104c052f94a1d62c3e004a19b2107133eb762f712"
     },
     "expo-native-ui": {
       "source": "expo/skills",
@@ -19,6 +37,12 @@
       "skillPath": "plugins/expo/skills/expo-project-structure/SKILL.md",
       "computedHash": "304707b48d3054cffbcfa4d3e7953c321afb6cc1b80125bbd5c500ddea1515bf"
     },
+    "expo-react-native-performance": {
+      "source": "pproenca/dot-skills",
+      "sourceType": "github",
+      "skillPath": "skills/.experimental/expo-react-native-performance/SKILL.md",
+      "computedHash": "da6e70dd6c48bd87388d966d8789063041a70928fa824841a3e097e59e924a54"
+    },
     "expo-router": {
       "source": "expo/skills",
       "sourceType": "github",
@@ -30,6 +54,30 @@
       "sourceType": "github",
       "skillPath": "plugins/expo/skills/expo-ui/SKILL.md",
       "computedHash": "5d538b466ab9d56803db5ba1cada627ab9eb51883fc21b2e8c1bd3d95b6129ee"
+    },
+    "healthkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/healthkit/SKILL.md",
+      "computedHash": "e1c858dde1ba454360059c541f5d9f86a053dab0d340faae033c05c10c2be423"
+    },
+    "mobile-accessibility": {
+      "source": "community-access/accessibility-agents",
+      "sourceType": "github",
+      "skillPath": "skills/mobile-accessibility/SKILL.md",
+      "computedHash": "7d559e70e51d574644bcf461366525c3da575042b05feab8bb08c198dda7f4e9"
+    },
+    "react-native-testing": {
+      "source": "callstack/react-native-testing-library",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-testing/SKILL.md",
+      "computedHash": "bb30ad4660a42c71178c91d7a3f2e88556add9dba2213ee26f099dbe352fd649"
+    },
+    "vibe-security": {
+      "source": "raroque/vibe-security-skill",
+      "sourceType": "github",
+      "skillPath": "vibe-security/SKILL.md",
+      "computedHash": "b9599a66355f44cff8082d89e1ea3891a2d2fa43dfdc890f435ea786fd66bcdf"
     }
   }
 }
