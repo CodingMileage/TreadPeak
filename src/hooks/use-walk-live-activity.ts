@@ -5,6 +5,10 @@ import { after, type LiveActivity } from "expo-widgets";
 import WalkActivity, {
   type WalkActivityProps,
 } from "@/live-activities/walk-activity";
+import {
+  hydrateActiveWalk,
+  useActiveWalkStore,
+} from "@/lib/active-walk-store";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -156,13 +160,13 @@ function adoptExistingActivity(): LiveActivity<WalkActivityProps> | null {
  *   are skipped when nothing changed since the last one sent.
  * - Ends it with a frozen "Walk complete" summary, removed by the system five
  *   minutes later, when `isTracking` becomes false.
- * - On mount after a relaunch, activities left over from the dead JS session
- *   are ended immediately (walk state is in-memory only, so no walk can still
- *   be tracked at that point).
+ * - On mount after a relaunch, a walk that is still recording keeps (re-attaches
+ *   to) its activity; activities left over from a walk that is no longer in
+ *   progress are ended immediately.
  *
  * Limitation: steps, distance and pace refresh only while the app's JS is
  * running (foreground, or briefly after backgrounding). The elapsed time keeps
- * ticking natively. Background location and APNs push are out of scope.
+ * ticking natively. APNs push is out of scope.
  *
  * iOS only: every call is behind `Platform.OS === "ios"`, so Android and web
  * are unaffected.
@@ -203,9 +207,18 @@ export function useWalkLiveActivity({
       const existing = activityRef.current ?? adoptExistingActivity();
       if (existing) {
         activityRef.current = existing;
-        existing
-          .update(props)
-          .catch((error: unknown) => warn("update failed", error));
+        existing.update(props).catch((error: unknown) => {
+          // The adopted activity may already be gone (ended by the system or
+          // a previous session): start a fresh one instead of going dark.
+          warn("update failed, starting a new activity", error);
+          if (activityRef.current !== existing) return;
+          try {
+            activityRef.current = WalkActivity.start(props, DEEP_LINK_URL);
+          } catch (startError) {
+            activityRef.current = null;
+            warn("start failed", startError);
+          }
+        });
         return;
       }
 
@@ -229,18 +242,24 @@ export function useWalkLiveActivity({
         .catch((error: unknown) => warn("end failed", error));
     }
     if (!activity) {
-      // Mount path after a relaunch: these activities belong to a walk
-      // session that died with the previous JS context. Leaving them would
-      // show a ticking timer for a walk that is no longer tracked.
-      try {
-        for (const stale of WalkActivity.getInstances()) {
-          stale
-            .end("immediate")
-            .catch((error: unknown) => warn("end stale failed", error));
+      // Mount path after a relaunch. The persisted walk may still be
+      // recording (it is resumed once loaded), so leftover activities are only
+      // ended when it says nothing is in progress. Ending them blindly here
+      // would kill the activity of a walk that is about to be resumed.
+      void hydrateActiveWalk().then((saved) => {
+        const current = useActiveWalkStore.getState().walk;
+        const recording = (current ?? saved)?.endedAt === null;
+        if (recording || activityRef.current !== null) return;
+        try {
+          for (const stale of WalkActivity.getInstances()) {
+            stale
+              .end("immediate")
+              .catch((error: unknown) => warn("end stale failed", error));
+          }
+        } catch (error) {
+          warn("getInstances failed", error);
         }
-      } catch (error) {
-        warn("getInstances failed", error);
-      }
+      });
     }
     activityRef.current = null;
     startedAtRef.current = null;
