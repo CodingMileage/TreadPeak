@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AppState } from "react-native";
 import { Pedometer } from "expo-sensors";
 
 // ---------------------------------------------------------------------------
@@ -6,13 +7,18 @@ import { Pedometer } from "expo-sensors";
 // ---------------------------------------------------------------------------
 
 export interface UsePedometerResult {
-  /** Total steps taken since `startTracking` was called. */
+  /** Steps taken since the walk started (`startedAtMs`); 0 when not walking. */
   steps: number;
   /** Whether the hardware pedometer is available. */
   isPedometerAvailable: boolean;
-  /** Reset the step counter. Call when starting a new walk. */
-  reset: () => void;
 }
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** How often the step count is re-read from the motion coprocessor. */
+const REFRESH_INTERVAL_MS = 3000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,20 +41,25 @@ function stepsFromDistance(distanceMetres: number): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Reads the device's built-in pedometer while active, and resets on demand.
+ * Counts the steps of the walk that began at `startedAtMs`.
  *
- * - Subscribes to `Pedometer.watchStepCount` for live hardware step counts.
- * - Falls back to a distance-based estimate when a hardware pedometer is
- *   not available so the user always sees a step count.
- * - `reset()` restarts the count from zero (call when starting a new walk).
+ * - While a walk is active, the count is read from the motion coprocessor's
+ *   history for `[startedAtMs, now]`. That history survives the app being
+ *   killed, so a force quit and relaunch mid-walk keeps every step.
+ * - The live `watchStepCount` stream (steps since this JS context started) is
+ *   only a fallback for platforms where history queries are unsupported.
+ * - Falls back to a distance-based estimate when no hardware pedometer is
+ *   available so the user always sees a step count.
+ *
+ * @param startedAtMs Walk start (epoch ms), or `null` when not walking.
  */
-export function usePedometer(distanceMetres: number): UsePedometerResult {
+export function usePedometer(
+  distanceMetres: number,
+  startedAtMs: number | null,
+): UsePedometerResult {
   const [isPedometerAvailable, setIsPedometerAvailable] = useState(false);
-  const [rawSteps, setRawSteps] = useState(0);
-  const [stepOffset, setStepOffset] = useState(0);
-  const subscriptionRef = useRef<ReturnType<
-    typeof Pedometer.watchStepCount
-  > | null>(null);
+  const [historySteps, setHistorySteps] = useState<number | null>(null);
+  const [watchSteps, setWatchSteps] = useState(0);
 
   // Check pedometer availability once.
   useEffect(() => {
@@ -57,34 +68,49 @@ export function usePedometer(distanceMetres: number): UsePedometerResult {
     });
   }, []);
 
-  // Subscribe to hardware step count when tracking.
-  useEffect(() => {
-    if (!isPedometerAvailable) return;
+  /** Re-read the walk's step count from the pedometer history. */
+  const refresh = useCallback(async (start: number) => {
+    try {
+      const result = await Pedometer.getStepCountAsync(
+        new Date(start),
+        new Date(),
+      );
+      setHistorySteps(result.steps);
+    } catch {
+      // History queries aren't supported here (e.g. Android): the live
+      // `watchStepCount` total is used instead.
+      setHistorySteps(null);
+    }
+  }, []);
 
+  // Track the active walk: reset on a new walk, then refresh on mount /
+  // relaunch, every few seconds, on each live step event and on foregrounding.
+  useEffect(() => {
+    setHistorySteps(null);
+    setWatchSteps(0);
+    if (!isPedometerAvailable || startedAtMs === null) return;
+
+    void refresh(startedAtMs);
+    const id = setInterval(() => void refresh(startedAtMs), REFRESH_INTERVAL_MS);
     const sub = Pedometer.watchStepCount(({ steps }) => {
-      setRawSteps(steps);
+      setWatchSteps(steps);
+      void refresh(startedAtMs);
+    });
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refresh(startedAtMs);
     });
 
-    subscriptionRef.current = sub;
-
     return () => {
-      sub?.remove();
+      clearInterval(id);
+      sub.remove();
+      appState.remove();
     };
-  }, [isPedometerAvailable]);
+  }, [isPedometerAvailable, startedAtMs, refresh]);
 
-  // The displayed step count is the raw total minus the offset (set at
-  // the start of each walk to zero out the count).
-  const hardwareSteps = rawSteps - stepOffset;
+  let steps: number;
+  if (!isPedometerAvailable) steps = stepsFromDistance(distanceMetres);
+  else if (startedAtMs === null) steps = 0;
+  else steps = Math.max(0, historySteps ?? watchSteps);
 
-  // If pedometer is available, use it. Otherwise estimate from distance.
-  const steps = isPedometerAvailable
-    ? Math.max(0, hardwareSteps)
-    : stepsFromDistance(distanceMetres);
-
-  /** Reset the counter for a new walk. */
-  const reset = useCallback(() => {
-    setStepOffset(rawSteps);
-  }, [rawSteps]);
-
-  return { steps, isPedometerAvailable, reset };
+  return { steps, isPedometerAvailable };
 }

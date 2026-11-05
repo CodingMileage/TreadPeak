@@ -196,7 +196,6 @@ export function LocationMap({
   const [mapReady, setMapReady] = useState(false);
   const [userHasPanned, setUserHasPanned] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const prevIsTracking = useRef(false);
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
   const { syncWorkouts } = useHealthKit();
@@ -216,8 +215,12 @@ export function LocationMap({
     [pathCoordinates],
   );
 
-  // Hardware pedometer (with distance-based fallback).
-  const { steps, reset: resetPedometer } = usePedometer(distanceMetres);
+  // Steps since the walk started, read from the pedometer history so they
+  // survive a force quit (with a distance-based fallback).
+  const { steps } = usePedometer(
+    distanceMetres,
+    isTracking ? startedAtMs : null,
+  );
 
   // Mirror the active walk into the iOS Live Activity.
   useWalkLiveActivity({ isTracking, steps, distanceMetres, startedAtMs });
@@ -255,18 +258,6 @@ export function LocationMap({
       );
     }
   }, [isTracking, steps, distanceMetres, elapsedSeconds, onWalkStateChange]);
-
-  // ---- Reset the live step counter when a walk starts ------------------------
-  // Saving the finished walk is handled by `useLocation`, so it also works
-  // when this screen isn't mounted (e.g. the walk ended in the background).
-  useEffect(() => {
-    if (!prevIsTracking.current && isTracking) {
-      resetPedometer();
-    }
-    prevIsTracking.current = isTracking;
-    // Only run when isTracking toggles.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTracking]);
 
   // ---- Handlers ------------------------------------------------------------
 
