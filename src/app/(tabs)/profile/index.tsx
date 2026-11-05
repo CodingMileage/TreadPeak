@@ -4,6 +4,7 @@ import { ScrollView, Text, View } from "react-native";
 import { useHealthKit } from "@/hooks/use-healthkit";
 import { formatMiles } from "@/lib/format";
 import { useWalkStore } from "@/lib/walk-store";
+import type { WalkEntry } from "@/lib/walk-store";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -19,6 +20,15 @@ const CALORIES_PER_M = 0.05;
 function formatSteps(steps: number): string {
   if (steps < 1000) return steps.toLocaleString();
   return `${(steps / 1000).toFixed(1)}k`;
+}
+
+/**
+ * Calories for one saved walk: the recorded value when HealthKit supplied
+ * one, otherwise the distance-based estimate (never both, which double-counts).
+ */
+function walkCalories(walk: WalkEntry): number {
+  if (walk.calories != null && walk.calories > 0) return walk.calories;
+  return Math.round(walk.distanceMetres * CALORIES_PER_M);
 }
 
 function formatDuration(seconds: number): string {
@@ -159,6 +169,16 @@ export default function ProfileScreen() {
   const walks = useWalkStore((s) => s.walks);
   const { todaySteps, todayDistance, todayEnergy } = useHealthKit();
 
+  // HealthKit only has active energy when an Apple Watch (or a workout app)
+  // wrote it, so an iPhone-only user reads 0. Fall back to the same
+  // distance-based estimate Home uses.
+  const todayCalories =
+    todayEnergy != null && todayEnergy > 0
+      ? todayEnergy
+      : todayDistance != null
+        ? Math.round(todayDistance * CALORIES_PER_M)
+        : null;
+
   // ---- Weekly stats --------------------------------------------------------
 
   const weeklyStats = useMemo(() => {
@@ -173,8 +193,7 @@ export default function ProfileScreen() {
       0,
     );
     const totalCalories = weekWalks.reduce(
-      (sum, w) =>
-        sum + (w.calories ?? 0) + Math.round(w.distanceMetres * CALORIES_PER_M),
+      (sum, w) => sum + walkCalories(w),
       0,
     );
 
@@ -192,6 +211,7 @@ export default function ProfileScreen() {
     const totalWalks = walks.length;
     const totalDistance = walks.reduce((sum, w) => sum + w.distanceMetres, 0);
     const totalSteps = walks.reduce((sum, w) => sum + w.steps, 0);
+    const totalCalories = walks.reduce((sum, w) => sum + walkCalories(w), 0);
 
     // Best day — group by date string
     const byDay = new Map<string, number>();
@@ -204,7 +224,13 @@ export default function ProfileScreen() {
       if (steps > bestDaySteps) bestDaySteps = steps;
     }
 
-    return { totalWalks, totalDistance, totalSteps, bestDaySteps };
+    return {
+      totalWalks,
+      totalDistance,
+      totalSteps,
+      totalCalories,
+      bestDaySteps,
+    };
   }, [walks]);
 
   // ---- Recent walks (last 5) -----------------------------------------------
@@ -259,7 +285,7 @@ export default function ProfileScreen() {
           All-Time
         </Text>
 
-        <View className="flex-row items-center justify-center gap-6 rounded-2xl bg-neutral-50 px-4 py-4 dark:bg-neutral-900/50">
+        <View className="flex-row items-center justify-center gap-3 rounded-2xl bg-neutral-50 px-4 py-4 dark:bg-neutral-900/50">
           <StatItem
             value={String(allTimeStats.totalWalks)}
             label="TOTAL WALKS"
@@ -268,6 +294,11 @@ export default function ProfileScreen() {
           <StatItem
             value={formatMiles(allTimeStats.totalDistance)}
             label="TOTAL DIST"
+          />
+          <StatDivider />
+          <StatItem
+            value={allTimeStats.totalCalories.toLocaleString()}
+            label="CALORIES"
           />
           <StatDivider />
           <StatItem
@@ -295,7 +326,7 @@ export default function ProfileScreen() {
           />
           <StatDivider />
           <StatItem
-            value={todayEnergy != null ? todayEnergy.toLocaleString() : "--"}
+            value={todayCalories != null ? todayCalories.toLocaleString() : "--"}
             label="CALORIES"
           />
         </View>
