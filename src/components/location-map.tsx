@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppState,
   Linking,
   Pressable,
   StyleSheet,
@@ -14,8 +15,7 @@ import { useHealthKit } from "@/hooks/use-healthkit";
 import { useLocation } from "@/hooks/use-location";
 import { usePedometer } from "@/hooks/use-pedometer";
 import { useWalkLiveActivity } from "@/hooks/use-walk-live-activity";
-import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
-import type { Coordinate } from "@/hooks/use-location";
+import { pathDistance } from "@/lib/walk-geo";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -51,33 +51,6 @@ export interface LocationMapProps {
   initialRegion?: Region;
   /** Called whenever the live walk stats change (tracking start / update / stop). */
   onWalkStateChange?: (snapshot: WalkStatsSnapshot | null) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function haversineDistance(a: Coordinate, b: Coordinate): number {
-  const R = 6_371_000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLon = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLon = Math.sin(dLon / 2);
-  const h =
-    sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-function totalDistance(coords: Coordinate[]): number {
-  if (coords.length < 2) return 0;
-  let d = 0;
-  for (let i = 1; i < coords.length; i++) {
-    d += haversineDistance(coords[i - 1], coords[i]);
-  }
-  return d;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +186,7 @@ export function LocationMap({
     requestPermission,
     isTracking,
     isAutoTracking,
+    startedAtMs,
     startTracking,
     stopTracking,
     pathCoordinates,
@@ -221,13 +195,10 @@ export function LocationMap({
   const mapRef = useRef<MapView>(null);
   const [mapReady, setMapReady] = useState(false);
   const [userHasPanned, setUserHasPanned] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [startedAt, setStartedAt] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const prevIsTracking = useRef(false);
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
-  const addWalk = useWalkStore((s) => s.addWalk);
   const { syncWorkouts } = useHealthKit();
 
   // Sync HealthKit workouts into the walk history on mount.
@@ -239,9 +210,9 @@ export function LocationMap({
   const statsTop = insets.top + 104;
   const buttonBottom = insets.bottom + 64;
 
-  // Distance derived from the polyline path.
+  // Distance derived from the (already accuracy-filtered) path.
   const distanceMetres = useMemo(
-    () => totalDistance(pathCoordinates),
+    () => pathDistance(pathCoordinates),
     [pathCoordinates],
   );
 
@@ -249,21 +220,29 @@ export function LocationMap({
   const { steps, reset: resetPedometer } = usePedometer(distanceMetres);
 
   // Mirror the active walk into the iOS Live Activity.
-  useWalkLiveActivity({ isTracking, steps, distanceMetres });
+  useWalkLiveActivity({ isTracking, steps, distanceMetres, startedAtMs });
 
-  // ---- Timer ---------------------------------------------------------------
+  // ---- Clock ---------------------------------------------------------------
+  // Elapsed time is derived from the walk's start timestamp, so it stays
+  // correct after the app was suspended or relaunched. The interval only
+  // re-renders the screen; it is never the source of truth.
   useEffect(() => {
-    if (isTracking) {
-      timerRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
-      }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
+    if (!isTracking) return;
+
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") setNow(Date.now());
+    });
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      clearInterval(id);
+      sub.remove();
     };
   }, [isTracking]);
+
+  const elapsedSeconds =
+    isTracking && startedAtMs !== null
+      ? Math.max(0, Math.floor((now - startedAtMs) / 1000))
+      : 0;
 
   // ---- Push live walk stats upward ------------------------------------------
 
@@ -277,39 +256,13 @@ export function LocationMap({
     }
   }, [isTracking, steps, distanceMetres, elapsedSeconds, onWalkStateChange]);
 
-  // ---- Auto-save on walk end -----------------------------------------------
+  // ---- Reset the live step counter when a walk starts ------------------------
+  // Saving the finished walk is handled by `useLocation`, so it also works
+  // when this screen isn't mounted (e.g. the walk ended in the background).
   useEffect(() => {
-    // Walk just started — capture the timestamp and reset counters.
     if (!prevIsTracking.current && isTracking) {
-      setStartedAt(new Date().toISOString());
-      setElapsedSeconds(0);
       resetPedometer();
     }
-
-    // Walk just ended (auto or manual) — save if it meets minimums.
-    if (prevIsTracking.current && !isTracking) {
-      const minDistance = 50; // metres
-      const minDuration = 60; // seconds
-
-      if (
-        startedAt &&
-        pathCoordinates.length > 1 &&
-        distanceMetres >= minDistance &&
-        elapsedSeconds >= minDuration
-      ) {
-        addWalk(
-          createWalkEntry({
-            startedAt,
-            endedAt: new Date().toISOString(),
-            durationSeconds: elapsedSeconds,
-            distanceMetres: Math.round(distanceMetres),
-            steps,
-            pathCoordinates,
-          }),
-        );
-      }
-    }
-
     prevIsTracking.current = isTracking;
     // Only run when isTracking toggles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
