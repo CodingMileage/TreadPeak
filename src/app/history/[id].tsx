@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, useColorScheme } from "react-native";
 import MapView, { Polyline, type Region } from "react-native-maps";
 import { useLocalSearchParams } from "expo-router";
 
+import { formatMiles } from "@/lib/format";
 import { useWalkStore } from "@/lib/walk-store";
 import type { Coordinate } from "@/lib/walk-geo";
 
@@ -32,12 +33,6 @@ function formatTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function formatDistance(metres: number): string {
-  if (metres < 1) return "0 m";
-  if (metres < 1000) return `${Math.round(metres)} m`;
-  return `${(metres / 1000).toFixed(1)} km`;
 }
 
 function formatDuration(seconds: number): string {
@@ -125,7 +120,7 @@ function StatsCard({
       <View className="flex-row justify-around">
         <View className="items-center">
           <Text className="text-2xl font-bold text-black dark:text-white">
-            {formatDistance(distanceMetres)}
+            {formatMiles(distanceMetres)}
           </Text>
           <Text className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Distance

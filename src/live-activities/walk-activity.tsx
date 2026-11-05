@@ -25,7 +25,7 @@ export interface WalkActivityProps {
   elapsedLabel: string;
   /** Pre-formatted step count (e.g. "1,234"). */
   stepsLabel: string;
-  /** Pre-formatted distance (e.g. "320 ft" or "1.2 mi"). */
+  /** Pre-formatted distance (e.g. "0.06 mi" or "1.25 mi"). */
   distanceLabel: string;
   /** Pre-formatted pace (e.g. "18:30 /mi") or "--" when unknown. */
   paceLabel: string;

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { useHealthKit } from "@/hooks/use-healthkit";
+import { formatMiles } from "@/lib/format";
 import { useWalkStore } from "@/lib/walk-store";
 
 // ---------------------------------------------------------------------------
@@ -10,10 +11,6 @@ import { useWalkStore } from "@/lib/walk-store";
 
 /** Rough calorie burn rate for walking: ~50 kcal per km. */
 const CALORIES_PER_M = 0.05;
-/** Metres → feet multiplier. */
-const FT_PER_M = 3.28084;
-/** Feet in a mile. */
-const FT_PER_MI = 5280;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,12 +19,6 @@ const FT_PER_MI = 5280;
 function formatSteps(steps: number): string {
   if (steps < 1000) return steps.toLocaleString();
   return `${(steps / 1000).toFixed(1)}k`;
-}
-
-function formatDistance(metres: number): string {
-  const ft = Math.round(metres * FT_PER_M);
-  if (ft < FT_PER_MI) return `${ft} ft`;
-  return `${(ft / FT_PER_MI).toFixed(1)} mi`;
 }
 
 function formatDuration(seconds: number): string {
@@ -134,7 +125,7 @@ function WalkRow({
       <View className="flex-row items-center gap-4">
         <View className="items-end">
           <Text className="text-sm font-semibold text-black dark:text-white">
-            {formatDistance(distanceMetres)}
+            {formatMiles(distanceMetres)}
           </Text>
           <Text className="text-xs text-neutral-500 dark:text-neutral-400">
             distance
@@ -249,7 +240,7 @@ export default function ProfileScreen() {
           <StatItem value={formatSteps(weeklyStats.steps)} label="STEPS" />
           <StatDivider />
           <StatItem
-            value={formatDistance(weeklyStats.distance)}
+            value={formatMiles(weeklyStats.distance)}
             label="DISTANCE"
           />
           <StatDivider />
@@ -275,7 +266,7 @@ export default function ProfileScreen() {
           />
           <StatDivider />
           <StatItem
-            value={formatDistance(allTimeStats.totalDistance)}
+            value={formatMiles(allTimeStats.totalDistance)}
             label="TOTAL DIST"
           />
           <StatDivider />
@@ -299,7 +290,7 @@ export default function ProfileScreen() {
           />
           <StatDivider />
           <StatItem
-            value={todayDistance != null ? formatDistance(todayDistance) : "--"}
+            value={todayDistance != null ? formatMiles(todayDistance) : "--"}
             label="DISTANCE"
           />
           <StatDivider />

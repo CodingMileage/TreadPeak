@@ -3,6 +3,7 @@ import { FlashList } from "@shopify/flash-list";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
+import { formatMiles } from "@/lib/format";
 import { useWalkStore } from "@/lib/walk-store";
 import type { WalkEntry } from "@/lib/walk-store";
 
@@ -25,12 +26,6 @@ function formatTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function formatDistance(metres: number): string {
-  if (metres < 1) return "0 m";
-  if (metres < 1000) return `${Math.round(metres)} m`;
-  return `${(metres / 1000).toFixed(1)} km`;
 }
 
 function formatDuration(seconds: number): string {
@@ -84,7 +79,7 @@ function WalkRow({ walk }: { walk: WalkEntry }) {
       <View className="flex-row justify-between">
         <View className="items-center">
           <Text className="text-xl font-bold text-black dark:text-white">
-            {formatDistance(walk.distanceMetres)}
+            {formatMiles(walk.distanceMetres)}
           </Text>
           <Text className="text-xs text-gray-500 dark:text-gray-400">
             Distance
