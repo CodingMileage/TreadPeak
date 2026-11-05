@@ -2,7 +2,12 @@ import { requireOptionalNativeModule } from "expo";
 import { Platform } from "react-native";
 
 /** Short keys the native module can total with an `HKStatisticsQuery`. */
-export const SUPPORTED_QUANTITIES = ["stepCount"] as const;
+export const SUPPORTED_QUANTITIES = [
+  "stepCount",
+  "distanceWalkingRunning",
+  "activeEnergyBurned",
+  "flightsClimbed",
+] as const;
 
 /** One of the {@link SUPPORTED_QUANTITIES} keys. */
 export type CumulativeQuantity = (typeof SUPPORTED_QUANTITIES)[number];

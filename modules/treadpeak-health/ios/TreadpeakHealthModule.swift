@@ -27,6 +27,12 @@ public class TreadpeakHealthModule: Module {
     switch key {
     case "stepCount":
       return (HKQuantityType(.stepCount), HKUnit.count())
+    case "distanceWalkingRunning":
+      return (HKQuantityType(.distanceWalkingRunning), HKUnit.meter())
+    case "activeEnergyBurned":
+      return (HKQuantityType(.activeEnergyBurned), HKUnit.kilocalorie())
+    case "flightsClimbed":
+      return (HKQuantityType(.flightsClimbed), HKUnit.count())
     default:
       throw Exception(name: "UnsupportedQuantity", description: "Unsupported quantity: \(key)")
     }
@@ -50,6 +56,9 @@ public class TreadpeakHealthModule: Module {
    * Overlapping iPhone and Watch samples are merged by HealthKit source
    * priority, user-entered samples are excluded, and a range with no data
    * reads as 0 rather than throwing.
+   *
+   * Supported keys and units: `stepCount` (count), `distanceWalkingRunning`
+   * (metres), `activeEnergyBurned` (kcal), `flightsClimbed` (count).
    */
   private func cumulativeSum(quantity: String, startISO: String, endISO: String) async throws -> Double {
     guard HKHealthStore.isHealthDataAvailable() else {
