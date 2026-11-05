@@ -7,15 +7,7 @@ import type { WalkStatsSnapshot } from "@/components/location-map";
 import { LocationMap } from "@/components/location-map";
 import { useHealthKit } from "@/hooks/use-healthkit";
 import { formatMiles } from "@/lib/format";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Average walking stride length in metres (2.5 ft). */
-const AVG_STRIDE_M = 0.762;
-/** Rough calorie burn rate for walking: ~50 kcal per km. */
-const CALORIES_PER_M = 0.05;
+import { distanceToCalories, stepsToDistance } from "@/lib/walk-stats";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -24,16 +16,6 @@ const CALORIES_PER_M = 0.05;
 function formatSteps(steps: number): string {
   if (steps < 1000) return steps.toLocaleString();
   return `${(steps / 1000).toFixed(1)}k`;
-}
-
-/** Estimate distance from step count using average stride length. */
-function stepsToDistance(steps: number): number {
-  return Math.round(steps * AVG_STRIDE_M);
-}
-
-/** Estimate calories burned from distance in metres. */
-function distanceToCalories(metres: number): number {
-  return Math.round(metres * CALORIES_PER_M);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +169,7 @@ export default function HomeScreen() {
   const isTracking = walkState?.isTracking ?? false;
   const liveSteps = walkState?.steps ?? 0;
   const liveDistance = walkState?.distanceMetres ?? 0;
-  const liveCalories = distanceToCalories(liveDistance);
+  const liveCalories = Math.round(distanceToCalories(liveDistance));
 
   // Merge pedometer and HealthKit data.
   //
@@ -198,7 +180,7 @@ export default function HomeScreen() {
   const pedoDistance =
     pedometerSteps != null ? stepsToDistance(pedometerSteps) : null;
   const pedoCalories =
-    pedoDistance != null ? distanceToCalories(pedoDistance) : null;
+    pedoDistance != null ? Math.round(distanceToCalories(pedoDistance)) : null;
 
   const dailySteps = pedometerSteps ?? todaySteps;
   const dailyDistance = pedoDistance ?? todayDistance;

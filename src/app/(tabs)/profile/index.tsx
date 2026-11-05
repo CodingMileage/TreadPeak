@@ -5,13 +5,7 @@ import { useHealthKit } from "@/hooks/use-healthkit";
 import { formatMiles } from "@/lib/format";
 import { useWalkStore } from "@/lib/walk-store";
 import type { WalkEntry } from "@/lib/walk-store";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Rough calorie burn rate for walking: ~50 kcal per km. */
-const CALORIES_PER_M = 0.05;
+import { distanceToCalories } from "@/lib/walk-stats";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -25,10 +19,11 @@ function formatSteps(steps: number): string {
 /**
  * Calories for one saved walk: the recorded value when HealthKit supplied
  * one, otherwise the distance-based estimate (never both, which double-counts).
+ * Unrounded: sum walks first, then round the total once.
  */
 function walkCalories(walk: WalkEntry): number {
   if (walk.calories != null && walk.calories > 0) return walk.calories;
-  return Math.round(walk.distanceMetres * CALORIES_PER_M);
+  return distanceToCalories(walk.distanceMetres);
 }
 
 function formatDuration(seconds: number): string {
@@ -176,7 +171,7 @@ export default function ProfileScreen() {
     todayEnergy != null && todayEnergy > 0
       ? todayEnergy
       : todayDistance != null
-        ? Math.round(todayDistance * CALORIES_PER_M)
+        ? Math.round(distanceToCalories(todayDistance))
         : null;
 
   // ---- Weekly stats --------------------------------------------------------
@@ -192,9 +187,8 @@ export default function ProfileScreen() {
       (sum, w) => sum + w.distanceMetres,
       0,
     );
-    const totalCalories = weekWalks.reduce(
-      (sum, w) => sum + walkCalories(w),
-      0,
+    const totalCalories = Math.round(
+      weekWalks.reduce((sum, w) => sum + walkCalories(w), 0),
     );
 
     return {
@@ -211,7 +205,9 @@ export default function ProfileScreen() {
     const totalWalks = walks.length;
     const totalDistance = walks.reduce((sum, w) => sum + w.distanceMetres, 0);
     const totalSteps = walks.reduce((sum, w) => sum + w.steps, 0);
-    const totalCalories = walks.reduce((sum, w) => sum + walkCalories(w), 0);
+    const totalCalories = Math.round(
+      walks.reduce((sum, w) => sum + walkCalories(w), 0),
+    );
 
     // Best day — group by date string
     const byDay = new Map<string, number>();

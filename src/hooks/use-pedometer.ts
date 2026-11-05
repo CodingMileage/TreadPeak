@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { Pedometer } from "expo-sensors";
 
+import { distanceToSteps } from "@/lib/walk-stats";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -25,15 +27,12 @@ const REFRESH_INTERVAL_MS = 3000;
 // ---------------------------------------------------------------------------
 
 /**
- * Approximate steps from distance travelled.
- *
- * Average walking stride length is ~0.762 m (2.5 ft). This is used as a
- * fallback when the device pedometer is unavailable (e.g. iPads, some
- * Android devices without hardware step counters).
+ * Approximate steps from distance travelled, used as a fallback when the
+ * device pedometer is unavailable (e.g. iPads, some Android devices without
+ * hardware step counters).
  */
 function stepsFromDistance(distanceMetres: number): number {
-  const AVG_STRIDE_METRES = 0.762;
-  return Math.round(distanceMetres / AVG_STRIDE_METRES);
+  return Math.round(distanceToSteps(distanceMetres));
 }
 
 // ---------------------------------------------------------------------------

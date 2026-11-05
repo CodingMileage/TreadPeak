@@ -6,6 +6,7 @@ import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
 import type { WalkEntry } from "@/lib/walk-store";
 import { pathDistance, shouldAcceptPoint } from "@/lib/walk-geo";
 import type { WalkPoint } from "@/lib/walk-geo";
+import { distanceToSteps } from "@/lib/walk-stats";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,8 +37,6 @@ const STORAGE_KEY = "treadpeak-active-walk";
 export const MIN_SAVED_DISTANCE_M = 50;
 /** Walks shorter than this (seconds) are discarded instead of saved. */
 export const MIN_SAVED_DURATION_S = 60;
-/** Average walking stride length in metres, used when no step data exists. */
-const AVG_STRIDE_M = 0.762;
 
 // ---------------------------------------------------------------------------
 // Store
@@ -206,7 +205,7 @@ export function finalizeActiveWalk(
       const steps =
         (await stepsBetween(walk.startedAt, endedAt)) ??
         fallbackSteps ??
-        Math.round(distanceMetres / AVG_STRIDE_M);
+        Math.round(distanceToSteps(distanceMetres));
 
       const entry = createWalkEntry({
         startedAt: new Date(walk.startedAt).toISOString(),
