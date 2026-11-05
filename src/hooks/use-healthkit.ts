@@ -6,6 +6,7 @@ import {
 } from "expo-healthkit-module";
 
 import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
+import { distanceToSteps } from "@/lib/walk-stats";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,7 +134,7 @@ async function fetchAndSyncWorkouts(importWalks: (walks: ReturnType<typeof creat
         const distMetres = Math.round((w.totalDistance ?? 0) * 1000);
         // Estimate steps from distance if not directly available (avg stride).
         const steps =
-          distMetres > 0 ? Math.round(distMetres / 0.762) : 0;
+          distMetres > 0 ? Math.round(distanceToSteps(distMetres)) : 0;
 
         return createWalkEntry({
           startedAt: w.startDate,
