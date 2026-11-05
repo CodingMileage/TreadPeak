@@ -147,3 +147,31 @@ export async function openHealthConnectInstall(): Promise<void> {
   }
   await nativeModule.openHealthConnectInstall();
 }
+
+/** ISO 8601 without fractional seconds, which the Swift parser also accepts. */
+function isoSeconds(ms: number): string {
+  return new Date(ms).toISOString().replace(/\.\d{3}/, "");
+}
+
+/**
+ * Whole steps between two instants (epoch ms), summed by the native module
+ * (deduplicated, no hand-typed entries). Resolves `null` when the native module
+ * is missing or the read rejects for any reason (permission, foreground-only
+ * rule, quota), so callers can fall back to another source.
+ */
+export async function getHealthStepsBetween(
+  startMs: number,
+  endMs: number,
+): Promise<number | null> {
+  if (nativeModule == null) return null;
+  try {
+    const steps = await getCumulativeSum(
+      "stepCount",
+      isoSeconds(startMs),
+      isoSeconds(endMs),
+    );
+    return Math.round(steps);
+  } catch {
+    return null;
+  }
+}

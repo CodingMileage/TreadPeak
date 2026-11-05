@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Pedometer } from "expo-sensors";
+import { Platform } from "react-native";
 import { create } from "zustand";
 
 import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
@@ -7,6 +8,7 @@ import type { WalkEntry } from "@/lib/walk-store";
 import { pathDistance, shouldAcceptPoint } from "@/lib/walk-geo";
 import type { WalkPoint } from "@/lib/walk-geo";
 import { distanceToSteps } from "@/lib/walk-stats";
+import { getHealthStepsBetween } from "../../modules/treadpeak-health";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,6 +57,8 @@ export const useActiveWalkStore = create<ActiveWalkState>(() => ({
 let hydration: Promise<ActiveWalk | null> | null = null;
 let writeChain: Promise<void> = Promise.resolve();
 let finalizing: Promise<WalkEntry | null> | null = null;
+/** Highest measured live step count noted for the current walk (memory only). */
+let liveWalkSteps: { startedAt: number; steps: number } | null = null;
 
 /** Queue a write so concurrent updates reach storage in order. */
 function persist(walk: ActiveWalk | null): void {
@@ -149,11 +153,44 @@ export function getActiveWalkDistance(walk: ActiveWalk | null): number {
 // Saving
 // ---------------------------------------------------------------------------
 
+/**
+ * Note the live step count measured for the walk that began at `startedAt`.
+ * Android keeps the highest count per walk (a new `startedAt` replaces the
+ * entry) and uses it when Health Connect lags at the end of the walk. In
+ * memory only: after a kill, Health Connect history covers the walk instead.
+ */
+export function recordLiveWalkSteps(startedAt: number, steps: number): void {
+  if (liveWalkSteps?.startedAt === startedAt) {
+    liveWalkSteps.steps = Math.max(liveWalkSteps.steps, steps);
+  } else {
+    liveWalkSteps = { startedAt, steps };
+  }
+}
+
+/**
+ * Android walk steps: the larger of Health Connect's interval total and the
+ * live count, because Health Connect can lag. The distance estimate is used
+ * only when both are missing or 0 (today's behaviour with no measurement).
+ */
+function pickAndroidWalkSteps(
+  measured: number | null,
+  live: number | undefined,
+  distanceMetres: number,
+): number {
+  const best = Math.round(Math.max(measured ?? 0, live ?? 0));
+  return best > 0 ? best : Math.round(distanceToSteps(distanceMetres));
+}
+
 /** Steps taken between two instants, from the motion coprocessor if possible. */
 async function stepsBetween(
   startMs: number,
   endMs: number,
 ): Promise<number | null> {
+  // Android has no pedometer history; Health Connect is the source. Finalize
+  // callers run in foreground hooks (use-location.ts), which satisfies Health
+  // Connect's foreground-read rule. A background read rejects, this resolves
+  // null, and the live count or the distance estimate is used.
+  if (Platform.OS === "android") return getHealthStepsBetween(startMs, endMs);
   try {
     if (!(await Pedometer.isAvailableAsync())) return null;
     const result = await Pedometer.getStepCountAsync(
@@ -172,7 +209,10 @@ async function stepsBetween(
  * and clear it. Safe to call twice: concurrent calls share one result, and a
  * second call finds nothing to save.
  *
- * @param fallbackSteps Used only when the pedometer can't report the interval.
+ * @param fallbackSteps iOS: used only when the pedometer can't report the
+ *   interval. Android: the saved steps are the larger of the Health Connect
+ *   interval total and this value (or, when omitted, the live count noted by
+ *   `recordLiveWalkSteps`).
  * @returns The saved entry, or `null` when nothing was saved.
  */
 export function finalizeActiveWalk(
@@ -202,10 +242,19 @@ export function finalizeActiveWalk(
         return null;
       }
 
-      const steps =
-        (await stepsBetween(walk.startedAt, endedAt)) ??
-        fallbackSteps ??
-        Math.round(distanceToSteps(distanceMetres));
+      const measured = await stepsBetween(walk.startedAt, endedAt);
+      let steps: number;
+      if (Platform.OS === "android") {
+        const live =
+          liveWalkSteps?.startedAt === walk.startedAt
+            ? liveWalkSteps.steps
+            : undefined;
+        steps = pickAndroidWalkSteps(measured, fallbackSteps ?? live, distanceMetres);
+      } else {
+        steps =
+          measured ?? fallbackSteps ?? Math.round(distanceToSteps(distanceMetres));
+      }
+      if (liveWalkSteps?.startedAt === walk.startedAt) liveWalkSteps = null;
 
       const entry = createWalkEntry({
         startedAt: new Date(walk.startedAt).toISOString(),
