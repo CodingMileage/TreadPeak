@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { after, type LiveActivity } from "expo-widgets";
 
+import { formatMiles, METRES_PER_MILE } from "@/lib/format";
 import WalkActivity, {
   type WalkActivityProps,
 } from "@/live-activities/walk-activity";
@@ -29,9 +30,6 @@ const UPDATE_INTERVAL_MS = 5_000;
 /** How long the "Walk complete" summary stays on the Lock Screen. */
 const END_DISMISS_AFTER_MS = 5 * 60 * 1000;
 
-const FEET_PER_METRE = 3.28084;
-const FEET_PER_MILE = 5280;
-const METRES_PER_MILE = 1609.344;
 /** Below this distance pace is too noisy to show. */
 const PACE_MIN_METRES = 50;
 /** Slower than this (minutes per mile) is shown as unknown. */
@@ -59,13 +57,6 @@ export interface WalkLiveActivityInput {
 /** Step count with locale grouping, e.g. "1,234". */
 function formatStepsLabel(steps: number): string {
   return steps.toLocaleString();
-}
-
-/** Whole feet below one mile, otherwise one-decimal miles (matches Home). */
-function formatDistanceLabel(metres: number): string {
-  const feet = metres * FEET_PER_METRE;
-  if (feet < FEET_PER_MILE) return Math.round(feet) + " ft";
-  return (metres / METRES_PER_MILE).toFixed(1) + " mi";
 }
 
 /** Pace as `m:ss /mi`, or "--" when distance is too short or pace too slow. */
@@ -107,7 +98,7 @@ function buildWalkActivityProps(
     isEnded,
     elapsedLabel: formatElapsedLabel(elapsedSeconds),
     stepsLabel: formatStepsLabel(steps),
-    distanceLabel: formatDistanceLabel(metres),
+    distanceLabel: formatMiles(metres),
     paceLabel: formatPaceLabel(elapsedSeconds, metres),
   };
 }
