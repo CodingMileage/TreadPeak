@@ -1,6 +1,9 @@
 package expo.modules.treadpeakhealth
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
@@ -92,12 +95,83 @@ class TreadpeakHealthModule : Module() {
               Sample(it.startTime, it.endTime, it.count.toDouble())
             }
           }
+          // iOS `distanceWalkingRunning` excludes cycling, but Health Connect's
+          // DistanceRecord has no activity-type filter, so distance written by a
+          // cycling app is included here. Excluding it would need exercise
+          // session reads (a new permission), which are out of scope.
+          "distanceWalkingRunning" -> {
+            val result = client.aggregate(
+              AggregateRequest(metrics = setOf(DistanceRecord.DISTANCE_TOTAL), timeRangeFilter = range),
+            )
+            total = result[DistanceRecord.DISTANCE_TOTAL]?.inMeters ?: 0.0
+            manual = manualEntrySum(client, DistanceRecord::class, start, end) {
+              Sample(it.startTime, it.endTime, it.distance.inMeters)
+            }
+          }
+          "activeEnergyBurned" -> {
+            val result = client.aggregate(
+              AggregateRequest(metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), timeRangeFilter = range),
+            )
+            total = result[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories ?: 0.0
+            manual = manualEntrySum(client, ActiveCaloriesBurnedRecord::class, start, end) {
+              Sample(it.startTime, it.endTime, it.energy.inKilocalories)
+            }
+          }
+          "flightsClimbed" -> {
+            val result = client.aggregate(
+              AggregateRequest(metrics = setOf(FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL), timeRangeFilter = range),
+            )
+            total = result[FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL] ?: 0.0
+            manual = manualEntrySum(client, FloorsClimbedRecord::class, start, end) {
+              Sample(it.startTime, it.endTime, it.floors)
+            }
+          }
           else -> throw UnsupportedQuantityException(quantity)
         }
         maxOf(0.0, total - manual)
       } catch (e: SecurityException) {
         // Permission revoked after it was granted.
         throw HealthPermissionDeniedException(e)
+      }
+    }
+
+    AsyncFunction("getHealthConnectStatus") Coroutine { ->
+      when (HealthConnectClient.getSdkStatus(context())) {
+        HealthConnectClient.SDK_AVAILABLE -> "available"
+        HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "updateRequired"
+        else -> "unavailable"
+      }
+    }
+
+    AsyncFunction("hasPermissions") Coroutine { ->
+      val granted = try {
+        client().permissionController.getGrantedPermissions()
+      } catch (e: SecurityException) {
+        throw HealthPermissionDeniedException(e)
+      }
+      PERMISSIONS.any { it in granted }
+    }
+
+    AsyncFunction("openHealthConnectInstall") {
+      val context = context()
+      val playIntent = Intent(Intent.ACTION_VIEW).apply {
+        data = Uri.parse(
+          "market://details?id=$PROVIDER_PACKAGE&url=healthconnect%3A%2F%2Fonboarding",
+        )
+        setPackage("com.android.vending")
+        putExtra("overlay", true)
+        putExtra("callerId", context.packageName)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      try {
+        context.startActivity(playIntent)
+      } catch (e: ActivityNotFoundException) {
+        // No Play Store on this device: fall back to the web listing.
+        val webIntent = Intent(
+          Intent.ACTION_VIEW,
+          Uri.parse("https://play.google.com/store/apps/details?id=$PROVIDER_PACKAGE"),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(webIntent)
       }
     }
   }
@@ -164,6 +238,8 @@ class TreadpeakHealthModule : Module() {
     }
 
   private companion object {
+    const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
+
     val PERMISSIONS: Set<String> = setOf(
       HealthPermission.getReadPermission(StepsRecord::class),
       HealthPermission.getReadPermission(DistanceRecord::class),

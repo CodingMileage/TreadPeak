@@ -15,6 +15,13 @@ export const SUPPORTED_QUANTITIES = [
 /** One of the {@link SUPPORTED_QUANTITIES} keys. */
 export type CumulativeQuantity = (typeof SUPPORTED_QUANTITIES)[number];
 
+/**
+ * Android Health Connect availability: `available` (ready), `updateRequired`
+ * (provider missing or outdated; offer {@link openHealthConnectInstall}) or
+ * `unavailable` (unsupported device).
+ */
+export type HealthConnectStatus = "available" | "updateRequired" | "unavailable";
+
 interface TreadpeakHealthNativeModule {
   getCumulativeSum(
     quantity: string,
@@ -23,6 +30,12 @@ interface TreadpeakHealthNativeModule {
   ): Promise<number>;
   /** Android only: opens the Health Connect permission dialog. */
   requestAuthorization?(): Promise<boolean>;
+  /** Android only: raw Health Connect SDK status string. */
+  getHealthConnectStatus?(): Promise<string>;
+  /** Android only: whether at least one read permission is granted. */
+  hasPermissions?(): Promise<boolean>;
+  /** Android only: opens the Play Store Health Connect install/update flow. */
+  openHealthConnectInstall?(): Promise<void>;
 }
 
 // `null` on web and on dev-client binaries built before this module existed.
@@ -90,4 +103,47 @@ export async function requestHealthConnectAuthorization(): Promise<boolean> {
     });
   }
   return authorizationInFlight;
+}
+
+/**
+ * Health Connect availability on this device, or `null` off Android. Resolves
+ * `"unavailable"` when the native method is missing or throws.
+ */
+export async function getHealthConnectStatus(): Promise<HealthConnectStatus | null> {
+  if (Platform.OS !== "android") return null;
+  if (nativeModule?.getHealthConnectStatus == null) return "unavailable";
+  try {
+    const status = await nativeModule.getHealthConnectStatus();
+    return status === "available" || status === "updateRequired"
+      ? status
+      : "unavailable";
+  } catch {
+    return "unavailable";
+  }
+}
+
+/**
+ * Whether at least one Health Connect read permission is currently granted.
+ * `false` off Android, when the native method is missing or when it throws.
+ */
+export async function hasHealthConnectPermissions(): Promise<boolean> {
+  if (Platform.OS !== "android" || nativeModule?.hasPermissions == null) {
+    return false;
+  }
+  try {
+    return await nativeModule.hasPermissions();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Open the Play Store flow that installs or updates Health Connect. A resolved
+ * no-op off Android or when the native method is missing.
+ */
+export async function openHealthConnectInstall(): Promise<void> {
+  if (Platform.OS !== "android" || nativeModule?.openHealthConnectInstall == null) {
+    return;
+  }
+  await nativeModule.openHealthConnectInstall();
 }

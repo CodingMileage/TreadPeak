@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Platform } from "react-native";
 import {
   authorizeHealthKit,
   getHealthData,
@@ -8,10 +8,14 @@ import {
 
 import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
 import { distanceToSteps } from "@/lib/walk-stats";
+import type { HealthConnectStatus } from "../../modules/treadpeak-health";
 import {
   getCumulativeSum,
+  getHealthConnectStatus,
+  hasHealthConnectPermissions,
   isCumulativeQuantity,
   isTreadpeakHealthAvailable,
+  openHealthConnectInstall,
 } from "../../modules/treadpeak-health";
 
 // ---------------------------------------------------------------------------
@@ -43,9 +47,22 @@ export interface HealthKitState {
   todayEnergy: number | null;
   /** Today's flights climbed, or `null`. */
   todayFlights: number | null;
+  /**
+   * Android Health Connect availability (`available`, `updateRequired` or
+   * `unavailable`), or `null` until checked and always `null` on iOS.
+   */
+  healthConnectStatus: HealthConnectStatus | null;
+  /**
+   * Open the Play Store flow that installs or updates Health Connect. A no-op
+   * on iOS.
+   */
+  openHealthConnectInstall: () => Promise<void>;
   /** Re-fetch today's data from HealthKit. */
   refresh: () => Promise<void>;
-  /** Pull historical workouts from HealthKit into the walk store. */
+  /**
+   * Pull historical workouts from HealthKit into the walk store. A no-op on
+   * Android, where Health Connect exercise sessions are out of scope.
+   */
   syncWorkouts: () => Promise<void>;
 }
 
@@ -210,6 +227,12 @@ export function useHealthKit(): HealthKitState {
   const [todayDistance, setTodayDistance] = useState<number | null>(null);
   const [todayEnergy, setTodayEnergy] = useState<number | null>(null);
   const [todayFlights, setTodayFlights] = useState<number | null>(null);
+  const [healthConnectStatus, setHealthConnectStatus] =
+    useState<HealthConnectStatus | null>(null);
+  // Bumped to re-run the authorization effect (Android only; never changes on iOS).
+  const [authAttempt, setAuthAttempt] = useState(0);
+  // Written only from the async callback below, never during render.
+  const previousStatus = useRef<HealthConnectStatus | null>(null);
 
   const importWalks = useWalkStore((s) => s.importWalks);
 
@@ -278,7 +301,51 @@ export function useHealthKit(): HealthKitState {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [importWalks]);
+  }, [importWalks, authAttempt]);
+
+  // Android only: Health Connect can be installed, updated or revoked while the
+  // app is backgrounded, so re-check whenever the app returns to the foreground.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    let cancelled = false;
+
+    async function check(fromForeground: boolean) {
+      const status = await getHealthConnectStatus();
+      if (cancelled) return;
+      const previous = previousStatus.current;
+      previousStatus.current = status;
+      setHealthConnectStatus(status);
+
+      if (!fromForeground || status !== "available") return;
+      const permitted = await hasHealthConnectPermissions();
+      if (cancelled) return;
+
+      if (authorized && !permitted) {
+        // Polling stops because Home's poll effect depends on `authorized`.
+        setAuthorized(false);
+        setLastError(
+          "Health Connect access was turned off. Turn it back on in Health Connect settings.",
+        );
+      } else if (
+        !authorized &&
+        (permitted || (previous !== null && previous !== "available"))
+      ) {
+        // Access was granted in settings, or Health Connect was just installed
+        // or updated: try authorizing again.
+        setAuthAttempt((n) => n + 1);
+      }
+    }
+
+    void check(false);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void check(true);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [authorized]);
 
   return {
     authorized,
@@ -288,6 +355,8 @@ export function useHealthKit(): HealthKitState {
     todayDistance,
     todayEnergy,
     todayFlights,
+    healthConnectStatus,
+    openHealthConnectInstall,
     refresh,
     syncWorkouts,
   };

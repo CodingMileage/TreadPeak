@@ -4,7 +4,10 @@ import type {
   GetHealthDataResult,
 } from "expo-healthkit-module";
 
-import { requestHealthConnectAuthorization } from "../../modules/treadpeak-health";
+import {
+  getHealthConnectStatus,
+  requestHealthConnectAuthorization,
+} from "../../modules/treadpeak-health";
 
 // Only types are imported from `expo-healthkit-module` above: the package is
 // not linked into the Android binary, so importing a value would throw.
@@ -15,6 +18,23 @@ import { requestHealthConnectAuthorization } from "../../modules/treadpeak-healt
  */
 export async function authorizeHealthKit(): Promise<AuthorizeResult> {
   try {
+    const status = await getHealthConnectStatus();
+    if (status === "unavailable") {
+      return {
+        success: false,
+        granted: [],
+        denied: [],
+        error: "Health Connect is not supported on this device.",
+      };
+    }
+    if (status === "updateRequired") {
+      return {
+        success: false,
+        granted: [],
+        denied: [],
+        error: "Health Connect needs to be installed or updated from the Play Store.",
+      };
+    }
     const granted = await requestHealthConnectAuthorization();
     if (granted) return { success: true, granted: [], denied: [] };
     return {
