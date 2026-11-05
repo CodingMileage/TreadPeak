@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import {
   authorizeHealthKit,
   getHealthData,
@@ -7,6 +8,11 @@ import {
 
 import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
 import { distanceToSteps } from "@/lib/walk-stats";
+import {
+  getCumulativeSum,
+  isCumulativeQuantity,
+  isTreadpeakHealthAvailable,
+} from "../../modules/treadpeak-health";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,11 +25,21 @@ export interface HealthKitState {
   isLoading: boolean;
   /** Human-readable error from the last authorization or fetch attempt. */
   lastError: string | null;
-  /** Today's total step count (from all sources), or `null` while loading. */
+  /**
+   * Today's total step count, or `null` while loading. On iOS the value is
+   * deduplicated across sources (iPhone + Apple Watch) and excludes
+   * user-entered samples.
+   */
   todaySteps: number | null;
-  /** Today's total walking + running distance in metres, or `null`. */
+  /**
+   * Today's total walking + running distance in metres, or `null`. On iOS it
+   * is deduplicated across sources and excludes user-entered samples.
+   */
   todayDistance: number | null;
-  /** Today's active energy burned in kcal, or `null`. */
+  /**
+   * Today's active energy burned in kcal, or `null`. On iOS it is
+   * deduplicated across sources and excludes user-entered samples.
+   */
   todayEnergy: number | null;
   /** Today's flights climbed, or `null`. */
   todayFlights: number | null;
@@ -52,6 +68,50 @@ function sumValues(data: { value?: number }[]): number {
   return data.reduce((acc, s) => acc + (s.value ?? 0), 0);
 }
 
+type TodayMetric =
+  | "stepCount"
+  | "distanceWalkingRunning"
+  | "activeEnergyBurned"
+  | "flightsClimbed";
+
+/**
+ * Read one daily total in the hook's exposed units (count, metres, kcal, count),
+ * unrounded. Returns `null` when the read fails.
+ *
+ * On iOS this uses an `HKStatisticsQuery`, which merges overlapping iPhone and
+ * Apple Watch samples (no double counting) and excludes user-entered samples.
+ * Android and iOS binaries without the native module sum raw samples instead.
+ */
+async function readTodayTotal(
+  metric: TodayMetric,
+  startDate: string,
+  endDate: string,
+): Promise<number | null> {
+  try {
+    if (
+      Platform.OS === "ios" &&
+      isTreadpeakHealthAvailable &&
+      isCumulativeQuantity(metric)
+    ) {
+      // The native module already returns metres for distance.
+      return await getCumulativeSum(metric, startDate, endDate);
+    }
+
+    const res = await getHealthData({
+      identifier: getPlatformIdentifier(metric),
+      startDate,
+      endDate,
+    });
+    if (!res.success) return null;
+    const total = sumValues(res.data);
+    // The legacy native module reports distance in km.
+    return metric === "distanceWalkingRunning" ? total * 1000 : total;
+  } catch (err) {
+    console.warn(`[useHealthKit] readTodayTotal(${metric}) failed:`, err);
+    return null;
+  }
+}
+
 async function fetchTodayData(
   setTodaySteps: (v: number) => void,
   setTodayDistance: (v: number) => void,
@@ -65,36 +125,17 @@ async function fetchTodayData(
     );
     const endDate = isoDate(now);
 
-    const [stepRes, distRes, energyRes, flightsRes] = await Promise.all([
-      getHealthData({
-        identifier: getPlatformIdentifier("stepCount"),
-        startDate,
-        endDate,
-      }),
-      getHealthData({
-        identifier: getPlatformIdentifier("distanceWalkingRunning"),
-        startDate,
-        endDate,
-      }),
-      getHealthData({
-        identifier: getPlatformIdentifier("activeEnergyBurned"),
-        startDate,
-        endDate,
-      }),
-      getHealthData({
-        identifier: getPlatformIdentifier("flightsClimbed"),
-        startDate,
-        endDate,
-      }),
+    const [steps, distance, energy, flights] = await Promise.all([
+      readTodayTotal("stepCount", startDate, endDate),
+      readTodayTotal("distanceWalkingRunning", startDate, endDate),
+      readTodayTotal("activeEnergyBurned", startDate, endDate),
+      readTodayTotal("flightsClimbed", startDate, endDate),
     ]);
 
-    if (stepRes.success) setTodaySteps(Math.round(sumValues(stepRes.data)));
-    if (distRes.success) {
-      const km = sumValues(distRes.data);
-      setTodayDistance(Math.round(km * 1000));
-    }
-    if (energyRes.success) setTodayEnergy(Math.round(sumValues(energyRes.data)));
-    if (flightsRes.success) setTodayFlights(Math.round(sumValues(flightsRes.data)));
+    if (steps !== null) setTodaySteps(Math.round(steps));
+    if (distance !== null) setTodayDistance(Math.round(distance));
+    if (energy !== null) setTodayEnergy(Math.round(energy));
+    if (flights !== null) setTodayFlights(Math.round(flights));
   } catch (err) {
     console.error("[useHealthKit] fetchTodayData failed:", err);
   }
