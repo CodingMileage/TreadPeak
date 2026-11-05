@@ -4,7 +4,7 @@ import {
   authorizeHealthKit,
   getHealthData,
   getPlatformIdentifier,
-} from "expo-healthkit-module";
+} from "@/lib/legacy-healthkit";
 
 import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
 import { distanceToSteps } from "@/lib/walk-stats";
@@ -26,9 +26,9 @@ export interface HealthKitState {
   /** Human-readable error from the last authorization or fetch attempt. */
   lastError: string | null;
   /**
-   * Today's total step count, or `null` while loading. On iOS the value is
-   * deduplicated across sources (iPhone + Apple Watch) and excludes
-   * user-entered samples.
+   * Today's total step count, or `null` while loading. The value is
+   * deduplicated across sources (iPhone + Apple Watch on iOS, Health Connect
+   * app priority on Android) and excludes user-entered samples.
    */
   todaySteps: number | null;
   /**
@@ -80,7 +80,10 @@ type TodayMetric =
  *
  * On iOS this uses an `HKStatisticsQuery`, which merges overlapping iPhone and
  * Apple Watch samples (no double counting) and excludes user-entered samples.
- * Android and iOS binaries without the native module sum raw samples instead.
+ * On Android it is a Health Connect aggregate (deduplicated across apps by the
+ * user's priority list) minus entries typed in by hand. iOS binaries without
+ * the native module sum raw samples instead; on Android the legacy shim reports
+ * no samples, so the result is `null`.
  */
 async function readTodayTotal(
   metric: TodayMetric,
@@ -88,11 +91,7 @@ async function readTodayTotal(
   endDate: string,
 ): Promise<number | null> {
   try {
-    if (
-      Platform.OS === "ios" &&
-      isTreadpeakHealthAvailable &&
-      isCumulativeQuantity(metric)
-    ) {
+    if (isTreadpeakHealthAvailable && isCumulativeQuantity(metric)) {
       // The native module already returns metres for distance.
       return await getCumulativeSum(metric, startDate, endDate);
     }
@@ -264,7 +263,9 @@ export function useHealthKit(): HealthKitState {
             const msg = err instanceof Error ? err.message : String(err);
             console.error("[useHealthKit] authorizeHealthKit threw:", msg);
             setLastError(
-              `HealthKit unavailable: ${msg}. Make sure you're running a dev-client build (not Expo Go) and the HealthKit entitlement is enabled.`,
+              Platform.OS === "android"
+                ? `Health Connect unavailable: ${msg}. Make sure you're running a dev-client build (not Expo Go) and Health Connect is installed.`
+                : `HealthKit unavailable: ${msg}. Make sure you're running a dev-client build (not Expo Go) and the HealthKit entitlement is enabled.`,
             );
           }
         })
