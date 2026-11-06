@@ -177,15 +177,22 @@ class TreadpeakHealthModule : Module() {
   }
 
   /**
-   * Sum of the records written with `RECORDING_METHOD_MANUAL_ENTRY` inside
-   * `[start, end]`, each prorated by how much of it overlaps the range so a
-   * record crossing midnight is not over-subtracted.
+   * How much of the aggregate came from records written with
+   * `RECORDING_METHOD_MANUAL_ENTRY` inside `[start, end]`.
    *
-   * Known limitations: a manual entry that Health Connect already deduped out
-   * of the aggregate is still subtracted, which errs toward a lower total; and
-   * apps that tag hand-typed data as UNKNOWN pass through uncounted here.
-   * No `dataOriginFilter` is used: excluding a whole app would also drop its
-   * automatic data.
+   * Health Connect removes overlapping time before it sums, even between
+   * records from the same app, so a manual entry that overlaps automatic data
+   * is already (partly) missing from the aggregate. Subtracting its full value
+   * would under-count. Each manual record is therefore prorated by the part of
+   * its interval, inside the range, that no non-manual record covers.
+   *
+   * Known limitations: this assumes the automatic record wins an overlap, but
+   * if the user's priority list ranks the manual entry's app above the source
+   * of the automatic data, part of the manual entry stays in the total (errs
+   * high); manual entries that overlap each other are not de-duplicated among
+   * themselves; and apps that tag hand-typed data as UNKNOWN pass through
+   * uncounted here. No `dataOriginFilter` is used: excluding a whole app would
+   * also drop its automatic data.
    */
   private suspend fun <T : Record> manualEntrySum(
     client: HealthConnectClient,
@@ -194,7 +201,8 @@ class TreadpeakHealthModule : Module() {
     end: Instant,
     sample: (T) -> Sample,
   ): Double {
-    var sum = 0.0
+    val manual = mutableListOf<Sample>()
+    val automatic = mutableListOf<LongArray>()
     var token: String? = null
     do {
       val response = client.readRecords(
@@ -205,13 +213,58 @@ class TreadpeakHealthModule : Module() {
         ),
       )
       for (record in response.records) {
-        if (record.metadata.recordingMethod != Metadata.RECORDING_METHOD_MANUAL_ENTRY) continue
         val s = sample(record)
-        sum += s.value * overlapFraction(s, start, end)
+        if (record.metadata.recordingMethod == Metadata.RECORDING_METHOD_MANUAL_ENTRY) {
+          manual.add(s)
+        } else {
+          automatic.add(longArrayOf(s.startTime.toEpochMilli(), s.endTime.toEpochMilli()))
+        }
       }
       token = response.pageToken
     } while (!token.isNullOrEmpty())
-    return sum
+
+    if (manual.isEmpty()) return 0.0
+    val covered = mergeIntervals(automatic)
+    return manual.sumOf { it.value * uncoveredFraction(it, covered, start, end) }
+  }
+
+  /** Union of `[start, end]` millisecond intervals, sorted and non-overlapping. */
+  private fun mergeIntervals(intervals: List<LongArray>): List<LongArray> {
+    val merged = mutableListOf<LongArray>()
+    for (i in intervals.sortedBy { it[0] }) {
+      val last = merged.lastOrNull()
+      if (last != null && i[0] <= last[1]) {
+        if (i[1] > last[1]) last[1] = i[1]
+      } else {
+        merged.add(longArrayOf(i[0], i[1]))
+      }
+    }
+    return merged
+  }
+
+  /**
+   * Fraction of `record` that lies inside `[start, end]` and is not covered by
+   * any interval in `covered` (which must be merged and sorted).
+   */
+  private fun uncoveredFraction(
+    record: Sample,
+    covered: List<LongArray>,
+    start: Instant,
+    end: Instant,
+  ): Double {
+    val durationMs = record.endTime.toEpochMilli() - record.startTime.toEpochMilli()
+    // A zero-length record that matched the range filter lies inside it.
+    if (durationMs <= 0) return 1.0
+    val windowStart = maxOf(start.toEpochMilli(), record.startTime.toEpochMilli())
+    val windowEnd = minOf(end.toEpochMilli(), record.endTime.toEpochMilli())
+    if (windowEnd <= windowStart) return 0.0
+
+    var uncoveredMs = windowEnd - windowStart
+    for (c in covered) {
+      val overlap = minOf(windowEnd, c[1]) - maxOf(windowStart, c[0])
+      if (overlap > 0) uncoveredMs -= overlap
+    }
+    return (uncoveredMs.toDouble() / durationMs).coerceIn(0.0, 1.0)
   }
 
   /**
@@ -220,15 +273,6 @@ class TreadpeakHealthModule : Module() {
    * per-type selectors instead of a shared supertype.
    */
   private class Sample(val startTime: Instant, val endTime: Instant, val value: Double)
-
-  private fun overlapFraction(record: Sample, start: Instant, end: Instant): Double {
-    val durationMs = record.endTime.toEpochMilli() - record.startTime.toEpochMilli()
-    // A zero-length record that matched the range filter lies inside it.
-    if (durationMs <= 0) return 1.0
-    val overlapStart = maxOf(start.toEpochMilli(), record.startTime.toEpochMilli())
-    val overlapEnd = minOf(end.toEpochMilli(), record.endTime.toEpochMilli())
-    return ((overlapEnd - overlapStart).toDouble() / durationMs).coerceIn(0.0, 1.0)
-  }
 
   private fun parseInstant(iso: String): Instant =
     try {
