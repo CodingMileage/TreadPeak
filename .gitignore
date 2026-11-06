@@ -49,3 +49,6 @@ CLAUDE.md
 .agents/
 .claude/
 .planning/
+# Gradle output of local Expo modules
+modules/*/android/build/
+modules/*/android/.cxx/

@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Platform } from "react-native";
 import {
   authorizeHealthKit,
   getHealthData,
   getPlatformIdentifier,
-} from "expo-healthkit-module";
+} from "@/lib/legacy-healthkit";
 
 import { createWalkEntry, useWalkStore } from "@/lib/walk-store";
 import { distanceToSteps } from "@/lib/walk-stats";
+import type { HealthConnectStatus } from "../../modules/treadpeak-health";
 import {
   getCumulativeSum,
+  getHealthConnectStatus,
+  hasHealthConnectPermissions,
   isCumulativeQuantity,
   isTreadpeakHealthAvailable,
+  openHealthConnectInstall,
 } from "../../modules/treadpeak-health";
 
 // ---------------------------------------------------------------------------
@@ -26,9 +30,9 @@ export interface HealthKitState {
   /** Human-readable error from the last authorization or fetch attempt. */
   lastError: string | null;
   /**
-   * Today's total step count, or `null` while loading. On iOS the value is
-   * deduplicated across sources (iPhone + Apple Watch) and excludes
-   * user-entered samples.
+   * Today's total step count, or `null` while loading. The value is
+   * deduplicated across sources (iPhone + Apple Watch on iOS, Health Connect
+   * app priority on Android) and excludes user-entered samples.
    */
   todaySteps: number | null;
   /**
@@ -43,9 +47,22 @@ export interface HealthKitState {
   todayEnergy: number | null;
   /** Today's flights climbed, or `null`. */
   todayFlights: number | null;
+  /**
+   * Android Health Connect availability (`available`, `updateRequired` or
+   * `unavailable`), or `null` until checked and always `null` on iOS.
+   */
+  healthConnectStatus: HealthConnectStatus | null;
+  /**
+   * Open the Play Store flow that installs or updates Health Connect. A no-op
+   * on iOS.
+   */
+  openHealthConnectInstall: () => Promise<void>;
   /** Re-fetch today's data from HealthKit. */
   refresh: () => Promise<void>;
-  /** Pull historical workouts from HealthKit into the walk store. */
+  /**
+   * Pull historical workouts from HealthKit into the walk store. A no-op on
+   * Android, where Health Connect exercise sessions are out of scope.
+   */
   syncWorkouts: () => Promise<void>;
 }
 
@@ -80,7 +97,10 @@ type TodayMetric =
  *
  * On iOS this uses an `HKStatisticsQuery`, which merges overlapping iPhone and
  * Apple Watch samples (no double counting) and excludes user-entered samples.
- * Android and iOS binaries without the native module sum raw samples instead.
+ * On Android it is a Health Connect aggregate (deduplicated across apps by the
+ * user's priority list) minus entries typed in by hand. iOS binaries without
+ * the native module sum raw samples instead; on Android the legacy shim reports
+ * no samples, so the result is `null`.
  */
 async function readTodayTotal(
   metric: TodayMetric,
@@ -88,11 +108,7 @@ async function readTodayTotal(
   endDate: string,
 ): Promise<number | null> {
   try {
-    if (
-      Platform.OS === "ios" &&
-      isTreadpeakHealthAvailable &&
-      isCumulativeQuantity(metric)
-    ) {
+    if (isTreadpeakHealthAvailable && isCumulativeQuantity(metric)) {
       // The native module already returns metres for distance.
       return await getCumulativeSum(metric, startDate, endDate);
     }
@@ -211,6 +227,12 @@ export function useHealthKit(): HealthKitState {
   const [todayDistance, setTodayDistance] = useState<number | null>(null);
   const [todayEnergy, setTodayEnergy] = useState<number | null>(null);
   const [todayFlights, setTodayFlights] = useState<number | null>(null);
+  const [healthConnectStatus, setHealthConnectStatus] =
+    useState<HealthConnectStatus | null>(null);
+  // Bumped to re-run the authorization effect (Android only; never changes on iOS).
+  const [authAttempt, setAuthAttempt] = useState(0);
+  // Written only from the async callback below, never during render.
+  const previousStatus = useRef<HealthConnectStatus | null>(null);
 
   const importWalks = useWalkStore((s) => s.importWalks);
 
@@ -264,7 +286,9 @@ export function useHealthKit(): HealthKitState {
             const msg = err instanceof Error ? err.message : String(err);
             console.error("[useHealthKit] authorizeHealthKit threw:", msg);
             setLastError(
-              `HealthKit unavailable: ${msg}. Make sure you're running a dev-client build (not Expo Go) and the HealthKit entitlement is enabled.`,
+              Platform.OS === "android"
+                ? `Health Connect unavailable: ${msg}. Make sure you're running a dev-client build (not Expo Go) and Health Connect is installed.`
+                : `HealthKit unavailable: ${msg}. Make sure you're running a dev-client build (not Expo Go) and the HealthKit entitlement is enabled.`,
             );
           }
         })
@@ -277,7 +301,51 @@ export function useHealthKit(): HealthKitState {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [importWalks]);
+  }, [importWalks, authAttempt]);
+
+  // Android only: Health Connect can be installed, updated or revoked while the
+  // app is backgrounded, so re-check whenever the app returns to the foreground.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    let cancelled = false;
+
+    async function check(fromForeground: boolean) {
+      const status = await getHealthConnectStatus();
+      if (cancelled) return;
+      const previous = previousStatus.current;
+      previousStatus.current = status;
+      setHealthConnectStatus(status);
+
+      if (!fromForeground || status !== "available") return;
+      const permitted = await hasHealthConnectPermissions();
+      if (cancelled) return;
+
+      if (authorized && !permitted) {
+        // Polling stops because Home's poll effect depends on `authorized`.
+        setAuthorized(false);
+        setLastError(
+          "Health Connect access was turned off. Turn it back on in Health Connect settings.",
+        );
+      } else if (
+        !authorized &&
+        (permitted || (previous !== null && previous !== "available"))
+      ) {
+        // Access was granted in settings, or Health Connect was just installed
+        // or updated: try authorizing again.
+        setAuthAttempt((n) => n + 1);
+      }
+    }
+
+    void check(false);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void check(true);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [authorized]);
 
   return {
     authorized,
@@ -287,6 +355,8 @@ export function useHealthKit(): HealthKitState {
     todayDistance,
     todayEnergy,
     todayFlights,
+    healthConnectStatus,
+    openHealthConnectInstall,
     refresh,
     syncWorkouts,
   };

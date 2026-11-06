@@ -1,0 +1,33 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.health.READ_STEPS" />
+  <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+  <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+  <uses-permission android:name="android.permission.health.READ_FLOORS_CLIMBED" />
+
+  <queries>
+    <package android:name="com.google.android.apps.healthdata" />
+  </queries>
+
+  <application>
+    <!-- Health Connect shows this from its permission screen (Android 13 and below). -->
+    <activity
+      android:name="expo.modules.treadpeakhealth.PermissionsRationaleActivity"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+      </intent-filter>
+    </activity>
+
+    <!-- Android 14+ entry point for the same screen; the system permission keeps other apps out. -->
+    <activity-alias
+      android:name="expo.modules.treadpeakhealth.ViewPermissionUsageActivity"
+      android:exported="true"
+      android:targetActivity="expo.modules.treadpeakhealth.PermissionsRationaleActivity"
+      android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+        <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+      </intent-filter>
+    </activity-alias>
+  </application>
+</manifest>
